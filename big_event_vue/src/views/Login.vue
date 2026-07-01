@@ -84,7 +84,7 @@ const clearRegisterData=()=>{
 <template>
     <el-row class="login-page">
         <el-col :span="12" class="bg">
-            <div class="welcome-text">苏尔汉河流域矿冶遗址数据库</div>
+            <div class="welcome-text">马家塬文物数据库</div>
         </el-col>
         <el-col :span="6" :offset="3" class="form">
             <!-- 注册表单 -->

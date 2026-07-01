@@ -175,7 +175,7 @@ const handleCommand = (command) => {
                 <router-view></router-view>
             </el-main>
             <!-- 底部区域 -->
-            <el-footer> 苏尔汉河流域矿冶遗址数据库©2023 Created by 王飞洋</el-footer>
+            <el-footer> 马家塬文物数据库©2023 Created by 王飞洋</el-footer>
         </el-container>
     </el-container>
 </template>
