@@ -1,0 +1,23 @@
+{
+  "relicCode": "RLC20230004",
+  "siteId": 3,
+  "siteName": "秦始皇陵",
+  "name": "兵马俑四号坑",
+  "type": "兵马俑坑",
+  "positionWithinSite": "陵园东侧3公里",
+  "excavationArea": "15000平方米",
+  "excavationUnit": "陕西省考古研究院",
+  "era": "秦代",
+  "stratigraphy": "深约5米，分为三层",
+  "structureDescription": "地下土木结构，东西长220米，南北宽58米",
+  "dimensions": "长220m，宽58m，深5m",
+  "orientation": "坐西向东",
+  "burialDepth": 5.0,
+  "preservationStatus": "良好",
+  "functionPurpose": "秦始皇陪葬坑",
+  "culturalFeatures": "陶俑、陶马、青铜兵器",
+  "relatedRelics": "一号坑、二号坑、三号坑",
+  "images": "[{\"url\":\"http://localhost:8081/images/relics/t41.jpg\"},{\"url\":\"http://localhost:8081/images/relics/t2.jpg\"},{\"url\":\"http://localhost:8081/images/relics/t3.jpg\"}]",
+  "drawings": "[{\"type\":\"平面图\",\"url\":\"http://localhost:8081/drawings/relics/t1-plan.jpg\"},{\"type\":\"剖面图\",\"url\":\"http://localhost:8081/drawings/relics/t1-section.jpg\"}]",
+  "notes": "世界八大奇迹之一"
+}

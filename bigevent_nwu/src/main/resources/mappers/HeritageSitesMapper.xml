@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itheima.bigevent.mapper.HeritageSitesMapper">
+    <!-- 动态更新遗址信息 -->
+    <update id="update">
+        UPDATE heritage_sites
+        <set>
+            <if test="siteCode != null">site_code = #{siteCode},</if>
+            <if test="name != null">name = #{name},</if>
+            <if test="alias != null">alias = #{alias},</if>
+            <if test="locationProvince != null">location_province = #{locationProvince},</if>
+            <if test="locationCity != null">location_city = #{locationCity},</if>
+            <if test="locationDetail != null">location_detail = #{locationDetail},</if>
+            <if test="latitude != null">latitude = #{latitude},</if>
+            <if test="longitude != null">longitude = #{longitude},</if>
+            <if test="era != null">era = #{era},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="protectionLevel != null">protection_level = #{protectionLevel},</if>
+            <if test="discoveryYear != null">discovery_year = #{discoveryYear},</if>
+            <if test="excavationYear != null">excavation_year = #{excavationYear},</if>
+            <if test="areaSize != null">area_size = #{areaSize},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="culturalValue != null">cultural_value = #{culturalValue},</if>
+            <if test="currentStatus != null">current_status = #{currentStatus},</if>
+            <if test="coverImage != null">cover_image = #{coverImage},</if>
+            update_time = #{updateTime}
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 动态查询遗址列表 -->
+    <select id="list" resultType="com.itheima.bigevent.pojo.heritageSites">
+        SELECT * FROM heritage_sites
+        <where>
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="locationProvince != null and locationProvince != ''">
+                AND location_province = #{locationProvince}
+            </if>
+            <if test="locationCity != null and locationCity != ''">
+                AND location_city = #{locationCity}
+            </if>
+            <if test="protectionLevel != null and protectionLevel != ''">
+                AND protection_level = #{protectionLevel}
+            </if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+    
+    <!-- 批量插入遗址数据 -->
+    <insert id="batchInsert">
+        INSERT INTO heritage_sites (site_code, name, alias, location_province, location_city, location_detail, latitude, longitude, era, category, protection_level, discovery_year, excavation_year, area_size, description, cultural_value, current_status, cover_image, created_by, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.siteCode}, #{item.name}, #{item.alias}, #{item.locationProvince}, #{item.locationCity}, #{item.locationDetail}, #{item.latitude}, #{item.longitude}, #{item.era}, #{item.category}, #{item.protectionLevel}, #{item.discoveryYear}, #{item.excavationYear}, #{item.areaSize}, #{item.description}, #{item.culturalValue}, #{item.currentStatus}, #{item.coverImage}, #{item.createdBy}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+    </insert>
+</mapper>

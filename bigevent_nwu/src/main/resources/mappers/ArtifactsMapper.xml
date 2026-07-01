@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itheima.bigevent.mapper.ArtifactsMapper">
+    <!-- 动态更新遗物信息 -->
+    <update id="update">
+        UPDATE artifacts
+        <set>
+            <if test="artifactCode != null">artifact_code = #{artifactCode},</if>
+            <if test="siteId != null">site_id = #{siteId},</if>
+            <if test="siteName != null">site_name = #{siteName},</if>
+            <if test="relicId != null">relic_id = #{relicId},</if>
+            <if test="relicName != null">relic_name = #{relicName},</if>
+            <if test="name != null">name = #{name},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="subCategory != null">sub_category = #{subCategory},</if>
+            <if test="material != null">material = #{material},</if>
+            <if test="era != null">era = #{era},</if>
+            <if test="size != null">size = #{size},</if>
+            <if test="weight != null">weight = #{weight},</if>
+            <if test="color != null">color = #{color},</if>
+            <if test="texture != null">texture = #{texture},</if>
+            <if test="decoration != null">decoration = #{decoration},</if>
+            <if test="inscription != null">inscription = #{inscription},</if>
+            <if test="productionTechnique != null">production_technique = #{productionTechnique},</if>
+            <if test="usageFunction != null">usage_function = #{usageFunction},</if>
+            <if test="discoveryContext != null">discovery_context = #{discoveryContext},</if>
+            <if test="preservationCondition != null">preservation_condition = #{preservationCondition},</if>
+            <if test="restorationInfo != null">restoration_info = #{restorationInfo},</if>
+            <if test="currentLocation != null">current_location = #{currentLocation},</if>
+            <if test="museumNumber != null">museum_number = #{museumNumber},</if>
+            <if test="images != null">images = #{images},</if>
+            <if test="model3dUrl != null">model3d_url = #{model3dUrl},</if>
+            <if test="researchNotes != null">research_notes = #{researchNotes},</if>
+            <if test="bibliography != null">bibliography = #{bibliography},</if>
+            <if test="culturalValue != null">cultural_value = #{culturalValue},</if>
+            <if test="verificationStatus != null">verification_status = #{verificationStatus},</if>
+            <if test="verificationNotes != null">verification_notes = #{verificationNotes},</if>
+            update_time = #{updateTime}
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 动态查询遗物列表 -->
+    <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
+        SELECT * FROM artifacts
+        <where>
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="artifactCode != null and artifactCode != ''">
+                AND artifact_code LIKE CONCAT('%', #{artifactCode}, '%')
+            </if>
+            <if test="siteName != null and siteName != ''">
+                AND site_name LIKE CONCAT('%', #{siteName}, '%')
+            </if>
+            <if test="relicName != null and relicName != ''">
+                AND relic_name LIKE CONCAT('%', #{relicName}, '%')
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="material != null and material != ''">
+                AND material = #{material}
+            </if>
+            <if test="era != null and era != ''">
+                AND era = #{era}
+            </if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+</mapper>

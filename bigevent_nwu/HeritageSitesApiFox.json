@@ -1,0 +1,218 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "文化遗产遗址管理API",
+    "description": "文化遗产遗址管理系统的API接口文档",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8081",
+      "description": "本地开发环境"
+    }
+  ],
+  "paths": {
+    "/heritage-sites": {
+      "post": {
+        "summary": "新增遗址",
+        "description": "新增文化遗产遗址信息",
+        "operationId": "addHeritageSite",
+        "requestBody": {
+          "description": "遗址信息",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeritageSites"
+              },
+              "examples": {
+                "heritageSiteExample": {
+                  "value": {
+                    "siteCode": "HS001",
+                    "name": "故宫博物院",
+                    "alias": "紫禁城",
+                    "locationProvince": "北京市",
+                    "locationCity": "北京市",
+                    "locationDetail": "东城区景山前街4号",
+                    "latitude": 39.916344,
+                    "longitude": 116.397155,
+                    "era": "明清",
+                    "category": "古建筑群",
+                    "protectionLevel": "国家级",
+                    "discoveryYear": 1925,
+                    "excavationYear": null,
+                    "areaSize": 720000,
+                    "description": "故宫博物院是中国明清两代的皇家宫殿，旧称紫禁城，位于北京中轴线的中心，是中国古代宫廷建筑之精华。",
+                    "culturalValue": "世界文化遗产，展示了中国古代宫殿建筑的辉煌成就",
+                    "currentStatus": "保存完好，对外开放",
+                    "coverImage": "https://example.com/gugong.jpg",
+                    "galleryImages": "https://example.com/gugong1.jpg,https://example.com/gugong2.jpg"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "新增成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                },
+                "examples": {
+                  "successExample": {
+                    "value": {
+                      "code": 1,
+                      "msg": "success",
+                      "data": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HeritageSites": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "遗址ID",
+            "format": "int32"
+          },
+          "siteCode": {
+            "type": "string",
+            "description": "遗址编号"
+          },
+          "name": {
+            "type": "string",
+            "description": "遗址名称"
+          },
+          "alias": {
+            "type": "string",
+            "description": "遗址别名"
+          },
+          "locationProvince": {
+            "type": "string",
+            "description": "所在省份"
+          },
+          "locationCity": {
+            "type": "string",
+            "description": "所在城市"
+          },
+          "locationDetail": {
+            "type": "string",
+            "description": "详细地址"
+          },
+          "latitude": {
+            "type": "number",
+            "description": "纬度",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "经度",
+            "format": "double"
+          },
+          "era": {
+            "type": "string",
+            "description": "所属时代"
+          },
+          "category": {
+            "type": "string",
+            "description": "遗址类别"
+          },
+          "protectionLevel": {
+            "type": "string",
+            "description": "保护级别"
+          },
+          "discoveryYear": {
+            "type": "integer",
+            "description": "发现年份",
+            "format": "int32"
+          },
+          "excavationYear": {
+            "type": "integer",
+            "description": "发掘年份",
+            "format": "int32"
+          },
+          "areaSize": {
+            "type": "number",
+            "description": "遗址面积",
+            "format": "double"
+          },
+          "description": {
+            "type": "string",
+            "description": "遗址描述"
+          },
+          "culturalValue": {
+            "type": "string",
+            "description": "文化价值"
+          },
+          "currentStatus": {
+            "type": "string",
+            "description": "现状描述"
+          },
+          "coverImage": {
+            "type": "string",
+            "description": "封面图片URL"
+          },
+          "galleryImages": {
+            "type": "string",
+            "description": "图集"
+          },
+          "createdBy": {
+            "type": "integer",
+            "description": "创建人id",
+            "format": "int32"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "修改时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "siteCode",
+          "name",
+          "locationProvince",
+          "locationCity",
+          "locationDetail",
+          "era",
+          "category",
+          "protectionLevel"
+        ]
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "响应码，1表示成功，0表示失败",
+            "format": "int32"
+          },
+          "msg": {
+            "type": "string",
+            "description": "响应信息"
+          },
+          "data": {
+            "type": "object",
+            "description": "响应数据"
+          }
+        }
+      }
+    }
+  }
+}

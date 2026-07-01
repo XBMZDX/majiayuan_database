@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itheima.bigevent.mapper.RelicsMapper">
+    <!-- 新增遗迹信息 -->
+    <insert id="add" parameterType="com.itheima.bigevent.pojo.relics">
+        INSERT INTO relics
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            relic_code,
+            site_id,
+            <if test="siteName != null">site_name,</if>
+            <if test="name != null">name,</if>
+            <if test="type != null">type,</if>
+            <if test="positionWithinSite != null">position_within_site,</if>
+            <if test="excavationArea != null">excavation_area,</if>
+            <if test="excavationUnit != null">excavation_unit,</if>
+            <if test="era != null">era,</if>
+            <if test="stratigraphy != null">stratigraphy,</if>
+            <if test="structureDescription != null">structure_description,</if>
+            <if test="dimensions != null">dimensions,</if>
+            <if test="orientation != null">orientation,</if>
+            <if test="burialDepth != null">burial_depth,</if>
+            <if test="preservationStatus != null">preservation_status,</if>
+            <if test="functionPurpose != null">function_purpose,</if>
+            <if test="culturalFeatures != null">cultural_features,</if>
+            <if test="relatedRelics != null">related_relics,</if>
+            <if test="images != null">images,</if>
+            <if test="drawings != null">drawings,</if>
+            <if test="notes != null">notes,</if>
+            created_by,
+            create_time,
+            update_time
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            <if test="relicCode != null">#{relicCode}</if><if test="relicCode == null">''</if>,
+            #{siteId},
+            <if test="siteName != null">#{siteName},</if>
+            <if test="name != null">#{name},</if>
+            <if test="type != null">#{type},</if>
+            <if test="positionWithinSite != null">#{positionWithinSite},</if>
+            <if test="excavationArea != null">#{excavationArea},</if>
+            <if test="excavationUnit != null">#{excavationUnit},</if>
+            <if test="era != null">#{era},</if>
+            <if test="stratigraphy != null">#{stratigraphy},</if>
+            <if test="structureDescription != null">#{structureDescription},</if>
+            <if test="dimensions != null">#{dimensions},</if>
+            <if test="orientation != null">#{orientation},</if>
+            <if test="burialDepth != null">#{burialDepth},</if>
+            <if test="preservationStatus != null">#{preservationStatus},</if>
+            <if test="functionPurpose != null">#{functionPurpose},</if>
+            <if test="culturalFeatures != null">#{culturalFeatures},</if>
+            <if test="relatedRelics != null">#{relatedRelics},</if>
+            <if test="images != null">#{images},</if>
+            <if test="drawings != null">#{drawings},</if>
+            <if test="notes != null">#{notes},</if>
+            #{createdBy},
+            #{createTime},
+            #{updateTime}
+        </trim>
+    </insert>
+    <!-- 分页查询遗迹列表 -->
+    <select id="list" resultType="com.itheima.bigevent.pojo.relics">
+        SELECT * FROM relics
+        <where>
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="relicCode != null and relicCode != ''">
+                AND relic_code = #{relicCode}
+            </if>
+            <if test="siteName != null and siteName != ''">
+                AND site_name LIKE CONCAT('%', #{siteName}, '%')
+            </if>
+            <if test="type != null and type != ''">
+                AND type = #{type}
+            </if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+    
+    <!-- 动态更新遗迹信息 -->
+    <update id="update" parameterType="com.itheima.bigevent.pojo.relics">
+        UPDATE relics
+        <set>
+            <if test="relicCode != null">relic_code = #{relicCode},</if>
+            <if test="siteId != null">site_id = #{siteId},</if>
+            <if test="siteName != null">site_name = #{siteName},</if>
+            <if test="name != null">name = #{name},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="positionWithinSite != null">position_within_site = #{positionWithinSite},</if>
+            <if test="excavationArea != null">excavation_area = #{excavationArea},</if>
+            <if test="excavationUnit != null">excavation_unit = #{excavationUnit},</if>
+            <if test="era != null">era = #{era},</if>
+            <if test="stratigraphy != null">stratigraphy = #{stratigraphy},</if>
+            <if test="structureDescription != null">structure_description = #{structureDescription},</if>
+            <if test="dimensions != null">dimensions = #{dimensions},</if>
+            <if test="orientation != null">orientation = #{orientation},</if>
+            <if test="burialDepth != null">burial_depth = #{burialDepth},</if>
+            <if test="preservationStatus != null">preservation_status = #{preservationStatus},</if>
+            <if test="functionPurpose != null">function_purpose = #{functionPurpose},</if>
+            <if test="culturalFeatures != null">cultural_features = #{culturalFeatures},</if>
+            <if test="relatedRelics != null">related_relics = #{relatedRelics},</if>
+            <if test="images != null">images = #{images},</if>
+            <if test="drawings != null">drawings = #{drawings},</if>
+            <if test="notes != null">notes = #{notes},</if>
+            update_time = #{updateTime}
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <!-- 批量插入遗迹数据 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO relics (relic_code, site_id, site_name, name, type, position_within_site, excavation_area, excavation_unit, era, stratigraphy, structure_description, dimensions, orientation, burial_depth, preservation_status, function_purpose, cultural_features, related_relics, images, drawings, notes, created_by, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="relic" separator=",">
+            (<if test="relic.relicCode != null">#{relic.relicCode}</if><if test="relic.relicCode == null">''</if>, 
+             #{relic.siteId}, 
+             #{relic.siteName}, #{relic.name}, #{relic.type}, #{relic.positionWithinSite}, #{relic.excavationArea}, #{relic.excavationUnit}, #{relic.era}, #{relic.stratigraphy}, #{relic.structureDescription}, #{relic.dimensions}, #{relic.orientation}, #{relic.burialDepth}, #{relic.preservationStatus}, #{relic.functionPurpose}, #{relic.culturalFeatures}, #{relic.relatedRelics}, #{relic.images}, #{relic.drawings}, #{relic.notes}, #{relic.createdBy}, #{relic.createTime}, #{relic.updateTime})
+        </foreach>
+    </insert>
+</mapper>
