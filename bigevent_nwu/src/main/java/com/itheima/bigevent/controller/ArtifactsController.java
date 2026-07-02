@@ -7,6 +7,8 @@ import com.itheima.bigevent.service.ArtifactsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/artifacts")
 @CrossOrigin
@@ -15,41 +17,45 @@ public class ArtifactsController {
     @Autowired
     private ArtifactsService artifactsService;
 
-    // 添加遗物
+    // 添加文物
     @PostMapping
     public Result add(@RequestBody artifacts artifact) {
         artifactsService.add(artifact);
         return Result.success();
     }
 
-    // 根据ID删除遗物
+    // 根据ID删除文物
     @DeleteMapping
     public Result deleteById(Integer id) {
         artifactsService.deleteById(id);
         return Result.success();
     }
 
-    // 修改遗物信息
+    // 批量删除文物
+    @PostMapping("/batch-delete")
+    public Result batchDelete(@RequestBody List<Integer> ids) {
+        artifactsService.batchDelete(ids);
+        return Result.success();
+    }
+
+    // 修改文物信息
     @PutMapping
     public Result update(@RequestBody artifacts artifact) {
         artifactsService.update(artifact);
         return Result.success();
     }
 
-    // 分页查询遗物列表
+    // 分页查询文物列表
     @GetMapping
     public Result<PageBean<artifacts>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestParam(required = false) String name,
-            @RequestParam(required = false) String artifactCode,
-            @RequestParam(required = false) String siteName,
-            @RequestParam(required = false) String relicName,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String material,
-            @RequestParam(required = false) String era) {
-        // 调用Service层方法获取分页结果
-        PageBean<artifacts> pageBean = artifactsService.list(pageNum, pageSize, name, artifactCode, siteName, relicName, category, material, era);
+            @RequestParam(required = false) String newArtifactName,
+            @RequestParam(required = false) String newArtifactCode,
+            @RequestParam(required = false) String material1,
+            @RequestParam(required = false) String excavationRelic,
+            @RequestParam(required = false) String completeness) {
+        PageBean<artifacts> pageBean = artifactsService.list(pageNum, pageSize, newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
         return Result.success(pageBean);
     }
 }

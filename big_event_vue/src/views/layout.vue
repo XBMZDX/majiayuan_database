@@ -112,7 +112,7 @@ const handleCommand = (command) => {
                     <el-icon>
                         <Promotion />
                     </el-icon>
-                    <span>遗物管理</span>
+                    <span>文物信息总览</span>
                 </el-menu-item>
                 <el-menu-item index="/artifact-detection/manage">
                     <el-icon>

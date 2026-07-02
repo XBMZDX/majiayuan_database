@@ -9,38 +9,34 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Data
 public class artifacts {
-    private Integer id; // 遗物ID
-    private String artifactCode; // 遗物编号
-    private Integer siteId; // 所属遗址ID
-    private String siteName; // 遗址名称
-    private Integer relicId; // 所属遗迹ID
-    private String relicName; // 遗迹名称
-    private String name; // 遗物名称
-    private String category; // 遗物类别
-    private String subCategory; // 子类别
-    private String material; // 材质
-    private String era; // 时代
-    private String size; // 尺寸
-    private Double weight; // 重量
-    private String color; // 颜色
-    private String texture; // 质地
-    private String decoration; // 纹饰
-    private String inscription; // 铭文/刻符
-    private String productionTechnique; // 制作工艺
-    private String usageFunction; // 使用功能
-    private String discoveryContext; // 出土背景
-    private String preservationCondition; // 保存状况
-    private String restorationInfo; // 修复信息
-    private String currentLocation; // 现藏地点
-    private String museumNumber; // 馆藏编号
-    private String images; // 遗物图片
-    private String model3dUrl; // 3D模型URL
-    private String researchNotes; // 研究记录
-    private String bibliography; // 参考文献
-    private String culturalValue; // 文化价值
-    private Integer createdBy; // 创建人id
-    private String verificationStatus; // 审核状态
-    private String verificationNotes; // 审核意见
-    private LocalDateTime createTime; // 创建时间
-    private LocalDateTime updateTime; // 更新时间
+    private Integer id;
+    private Integer serialNumber;       // 序号
+    private String newArtifactCode;     // 文物新编号
+    private String newArtifactName;     // 文物新名称
+    private String originalArtifactCode;// 文物原始编号
+    private String originalArtifactName;// 文物原名称
+    private String material1;           // 材质1
+    private String completeness;        // 完整度
+    private String artifactDescription; // 文物描述2
+    private Integer quantity1;          // 数量1
+    private Integer quantity2;          // 数量2
+    private String dimensions;          // 尺寸
+    private String weight;              // 重量
+    private String excavationRelic;     // 出土遗迹
+    private String excavationPosition;  // 出土位置
+    private String excavationTime;      // 出土时间
+    private String storageMethod;       // 存放方式
+    private String storageLocation;     // 存放地点
+    private String images;              // 图片
+    private String transferProcess;     // 文物流转过程
+    private String restorationStatus;   // 修复、复原状况
+    private String photographer;        // 拍照人
+    private String draftsperson;        // 绘图人
+    private String textDescriber;       // 文字描述人
+    private String notes;               // 备注
+    private String gradingStatus;       // 定级情况
+    private String testingStatus;       // 科技检测情况
+    private Integer createdBy;          // 创建人id
+    private LocalDateTime createTime;   // 创建时间
+    private LocalDateTime updateTime;   // 更新时间
 }

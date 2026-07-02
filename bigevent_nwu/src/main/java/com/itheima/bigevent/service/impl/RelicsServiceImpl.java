@@ -90,4 +90,9 @@ public class RelicsServiceImpl implements RelicsService {
             relicsMapper.batchInsert(relicsList);
         }
     }
+
+    @Override
+    public List<String> getNames() {
+        return relicsMapper.getNames();
+    }
 }

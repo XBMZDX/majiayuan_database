@@ -4,6 +4,7 @@ import com.itheima.bigevent.pojo.relics;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 import java.util.List;
 
 @Mapper
@@ -23,4 +24,8 @@ public interface RelicsMapper {
     
     // 批量插入遗迹数据
     void batchInsert(List<relics> relicsList);
+
+    // 获取所有遗迹名称（供下拉筛选使用）
+    @Select("SELECT DISTINCT name FROM relics WHERE name IS NOT NULL AND name != '' ORDER BY name")
+    List<String> getNames();
 }

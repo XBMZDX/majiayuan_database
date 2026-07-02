@@ -20,4 +20,7 @@ public interface RelicsService {
     
     // 批量导入遗迹数据
     void batchImport(List<relics> relicsList);
+
+    // 获取所有遗迹名称列表（供下拉筛选）
+    List<String> getNames();
 }

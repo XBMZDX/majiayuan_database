@@ -51,6 +51,12 @@ public class RelicsController {
         return Result.success(pageBean);
     }
     
+    // 获取所有遗迹名称（供下拉筛选）
+    @GetMapping("/names")
+    public Result<List<String>> getNames() {
+        return Result.success(relicsService.getNames());
+    }
+
     // 批量导入遗迹数据
     @PostMapping("/batch")
     public Result batchImport(@RequestBody List<relics> relicsList) {

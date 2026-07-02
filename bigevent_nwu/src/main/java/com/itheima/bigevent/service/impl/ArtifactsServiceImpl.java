@@ -9,6 +9,7 @@ import com.itheima.bigevent.service.ArtifactsService;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,7 +21,11 @@ public class ArtifactsServiceImpl implements ArtifactsService {
     @Autowired
     private ArtifactsMapper artifactsMapper;
 
+    /**
+     * 新增文物 — 自动分配序号（填补空缺或末尾追加），事务保证原子性
+     */
     @Override
+    @Transactional
     public void add(artifacts artifact) {
         // 设置创建时间和更新时间
         artifact.setCreateTime(LocalDateTime.now());
@@ -31,17 +36,50 @@ public class ArtifactsServiceImpl implements ArtifactsService {
         Integer userId = (Integer) map.get("id");
         artifact.setCreatedBy(userId);
 
-        // 设置默认审核状态
-        artifact.setVerificationStatus("pending");
+        // 自动分配序号：优先填补空缺，无空缺则追加到末尾
+        if (artifact.getSerialNumber() == null) {
+            Integer gapSerial = artifactsMapper.findFirstGapSerialNumber();
+            if (gapSerial != null && gapSerial > 0) {
+                artifact.setSerialNumber(gapSerial); // 填补空缺
+            } else {
+                // 无空缺，追加到末尾
+                Integer maxSerial = artifactsMapper.getMaxSerialNumber();
+                artifact.setSerialNumber(maxSerial + 1);
+            }
+        }
 
         // 调用Mapper层方法新增数据
         artifactsMapper.add(artifact);
     }
 
+    /**
+     * 删除文物 — 同时重排后续序号以保持连续，事务保证原子性
+     */
     @Override
+    @Transactional
     public void deleteById(Integer id) {
-        // 调用Mapper层方法根据ID删除数据
+        // 先获取被删除记录的序号
+        Integer deletedSerialNumber = artifactsMapper.getSerialNumberById(id);
+        // 删除记录
         artifactsMapper.deleteById(id);
+        // 将大于被删序号的记录全部减1，消除空缺
+        if (deletedSerialNumber != null) {
+            artifactsMapper.decrementAfterDelete(deletedSerialNumber);
+        }
+    }
+
+    /**
+     * 批量删除文物 — 删除后整体重排序号，事务保证原子性
+     */
+    @Override
+    @Transactional
+    public void batchDelete(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        // 批量删除
+        artifactsMapper.batchDelete(ids);
+        // 全部删除后整体重新编号，保持序号连续
+        artifactsMapper.initRowNum();
+        artifactsMapper.renumberAllSerialNumbers();
     }
 
     @Override
@@ -54,7 +92,7 @@ public class ArtifactsServiceImpl implements ArtifactsService {
     }
 
     @Override
-    public PageBean<artifacts> list(Integer pageNum, Integer pageSize, String name, String artifactCode, String siteName, String relicName, String category, String material, String era) {
+    public PageBean<artifacts> list(Integer pageNum, Integer pageSize, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness) {
         // 创建PageBean对象
         PageBean<artifacts> pageBean = new PageBean<>();
 
@@ -62,7 +100,7 @@ public class ArtifactsServiceImpl implements ArtifactsService {
         PageHelper.startPage(pageNum, pageSize);
 
         // 调用Mapper层方法查询数据
-        List<artifacts> artifactsList = artifactsMapper.list(name, artifactCode, siteName, relicName, category, material, era);
+        List<artifacts> artifactsList = artifactsMapper.list(newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
 
         // 使用PageInfo获取分页信息
         PageInfo<artifacts> pageInfo = new PageInfo<>(artifactsList);

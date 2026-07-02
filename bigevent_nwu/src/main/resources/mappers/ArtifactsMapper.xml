@@ -1,71 +1,69 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.itheima.bigevent.mapper.ArtifactsMapper">
-    <!-- 动态更新遗物信息 -->
+    <!-- 批量删除文物 -->
+    <delete id="batchDelete">
+        DELETE FROM artifacts WHERE id IN
+        <foreach collection="list" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <!-- 动态更新文物信息 -->
     <update id="update">
         UPDATE artifacts
         <set>
-            <if test="artifactCode != null">artifact_code = #{artifactCode},</if>
-            <if test="siteId != null">site_id = #{siteId},</if>
-            <if test="siteName != null">site_name = #{siteName},</if>
-            <if test="relicId != null">relic_id = #{relicId},</if>
-            <if test="relicName != null">relic_name = #{relicName},</if>
-            <if test="name != null">name = #{name},</if>
-            <if test="category != null">category = #{category},</if>
-            <if test="subCategory != null">sub_category = #{subCategory},</if>
-            <if test="material != null">material = #{material},</if>
-            <if test="era != null">era = #{era},</if>
-            <if test="size != null">size = #{size},</if>
+            <if test="serialNumber != null">serial_number = #{serialNumber},</if>
+            <if test="newArtifactCode != null">new_artifact_code = #{newArtifactCode},</if>
+            <if test="newArtifactName != null">new_artifact_name = #{newArtifactName},</if>
+            <if test="originalArtifactCode != null">original_artifact_code = #{originalArtifactCode},</if>
+            <if test="originalArtifactName != null">original_artifact_name = #{originalArtifactName},</if>
+            <if test="material1 != null">material1 = #{material1},</if>
+            <if test="completeness != null">completeness = #{completeness},</if>
+            <if test="artifactDescription != null">artifact_description = #{artifactDescription},</if>
+            <if test="quantity1 != null">quantity1 = #{quantity1},</if>
+            <if test="quantity2 != null">quantity2 = #{quantity2},</if>
+            <if test="dimensions != null">dimensions = #{dimensions},</if>
             <if test="weight != null">weight = #{weight},</if>
-            <if test="color != null">color = #{color},</if>
-            <if test="texture != null">texture = #{texture},</if>
-            <if test="decoration != null">decoration = #{decoration},</if>
-            <if test="inscription != null">inscription = #{inscription},</if>
-            <if test="productionTechnique != null">production_technique = #{productionTechnique},</if>
-            <if test="usageFunction != null">usage_function = #{usageFunction},</if>
-            <if test="discoveryContext != null">discovery_context = #{discoveryContext},</if>
-            <if test="preservationCondition != null">preservation_condition = #{preservationCondition},</if>
-            <if test="restorationInfo != null">restoration_info = #{restorationInfo},</if>
-            <if test="currentLocation != null">current_location = #{currentLocation},</if>
-            <if test="museumNumber != null">museum_number = #{museumNumber},</if>
+            <if test="excavationRelic != null">excavation_relic = #{excavationRelic},</if>
+            <if test="excavationPosition != null">excavation_position = #{excavationPosition},</if>
+            <if test="excavationTime != null">excavation_time = #{excavationTime},</if>
+            <if test="storageMethod != null">storage_method = #{storageMethod},</if>
+            <if test="storageLocation != null">storage_location = #{storageLocation},</if>
             <if test="images != null">images = #{images},</if>
-            <if test="model3dUrl != null">model3d_url = #{model3dUrl},</if>
-            <if test="researchNotes != null">research_notes = #{researchNotes},</if>
-            <if test="bibliography != null">bibliography = #{bibliography},</if>
-            <if test="culturalValue != null">cultural_value = #{culturalValue},</if>
-            <if test="verificationStatus != null">verification_status = #{verificationStatus},</if>
-            <if test="verificationNotes != null">verification_notes = #{verificationNotes},</if>
+            <if test="transferProcess != null">transfer_process = #{transferProcess},</if>
+            <if test="restorationStatus != null">restoration_status = #{restorationStatus},</if>
+            <if test="photographer != null">photographer = #{photographer},</if>
+            <if test="draftsperson != null">draftsperson = #{draftsperson},</if>
+            <if test="textDescriber != null">text_describer = #{textDescriber},</if>
+            <if test="notes != null">notes = #{notes},</if>
+            <if test="gradingStatus != null">grading_status = #{gradingStatus},</if>
+            <if test="testingStatus != null">testing_status = #{testingStatus},</if>
             update_time = #{updateTime}
         </set>
         WHERE id = #{id}
     </update>
-    
-    <!-- 动态查询遗物列表 -->
+
+    <!-- 动态查询文物列表 -->
     <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
         SELECT * FROM artifacts
         <where>
-            <if test="name != null and name != ''">
-                AND name LIKE CONCAT('%', #{name}, '%')
+            <if test="newArtifactName != null and newArtifactName != ''">
+                AND new_artifact_name LIKE CONCAT('%', #{newArtifactName}, '%')
             </if>
-            <if test="artifactCode != null and artifactCode != ''">
-                AND artifact_code LIKE CONCAT('%', #{artifactCode}, '%')
+            <if test="newArtifactCode != null and newArtifactCode != ''">
+                AND new_artifact_code LIKE CONCAT('%', #{newArtifactCode}, '%')
             </if>
-            <if test="siteName != null and siteName != ''">
-                AND site_name LIKE CONCAT('%', #{siteName}, '%')
+            <if test="material1 != null and material1 != ''">
+                AND material1 LIKE CONCAT('%', #{material1}, '%')
             </if>
-            <if test="relicName != null and relicName != ''">
-                AND relic_name LIKE CONCAT('%', #{relicName}, '%')
+            <if test="excavationRelic != null and excavationRelic != ''">
+                AND excavation_relic LIKE CONCAT('%', #{excavationRelic}, '%')
             </if>
-            <if test="category != null and category != ''">
-                AND category = #{category}
-            </if>
-            <if test="material != null and material != ''">
-                AND material = #{material}
-            </if>
-            <if test="era != null and era != ''">
-                AND era = #{era}
+            <if test="completeness != null and completeness != ''">
+                AND completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
-        ORDER BY create_time DESC
+        ORDER BY serial_number ASC
     </select>
 </mapper>

@@ -2,14 +2,17 @@ package com.itheima.bigevent.service;
 
 import com.itheima.bigevent.pojo.PageBean;
 import com.itheima.bigevent.pojo.artifacts;
+import java.util.List;
 
 public interface ArtifactsService {
-    // 添加遗物
+    // 添加文物
     void add(artifacts artifact);
-    // 根据ID删除遗物
+    // 根据ID删除文物
     void deleteById(Integer id);
-    // 修改遗物信息
+    // 批量删除文物
+    void batchDelete(List<Integer> ids);
+    // 修改文物信息
     void update(artifacts artifact);
-    // 分页查询遗物列表
-    PageBean<artifacts> list(Integer pageNum, Integer pageSize, String name, String artifactCode, String siteName, String relicName, String category, String material, String era);
+    // 分页查询文物列表
+    PageBean<artifacts> list(Integer pageNum, Integer pageSize, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
 }
