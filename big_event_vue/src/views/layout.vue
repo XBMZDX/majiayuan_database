@@ -15,16 +15,21 @@ import avatar from '@/assets/default.png'
 import { userInfoService } from '@/api/user.js'
 //导入pinia
 import useUserInfoStore from '@/stores/userInfo.js'
-import { handleError } from 'vue';
 import { useTokenStore } from '@/stores/token';
 const tokenStore = useTokenStore();
 const userInfoStore = useUserInfoStore();
 
 //获取个人信息
 const getUserInfo = async () => {
-    let result = await userInfoService();
-    //存储pinia
-    userInfoStore.info = result.data;
+    if (!tokenStore.token) return
+    try {
+        let result = await userInfoService();
+        //存储pinia
+        userInfoStore.info = result.data;
+    } catch (error) {
+        // 获取用户信息失败，不影响页面渲染
+        console.error('获取用户信息失败:', error)
+    }
 }
 getUserInfo()
 //条目被点击过后被掉用的函数
@@ -84,12 +89,12 @@ const handleCommand = (command) => {
             <!-- 菜单标签 -->
             <el-menu active-text-color="#ffd04b" background-color="#232323" text-color="#fff" router> 
                 <!-- 展示的对应组件访问的路径 -->
-                <!-- <el-menu-item index="/show/manage">
+                <el-menu-item index="/show/manage">
                     <el-icon>
                         <Promotion />
                     </el-icon>
                     <span>展示界面</span>
-                </el-menu-item> -->
+                </el-menu-item>
                 <el-menu-item index="/site/manage">
                     <el-icon>
                         <Management />

@@ -44,6 +44,23 @@ const router = createRouter({
     routes:routes
 })
 
+//路由守卫：未登录时拦截所有需要认证的页面
+import { useTokenStore } from '@/stores/token.js'
+
+router.beforeEach((to, from, next) => {
+    const tokenStore = useTokenStore()
+    // 已登录用户访问登录页 → 重定向到首页
+    if (to.path === '/Login' && tokenStore.token) {
+        next('/')
+        return
+    }
+    // 未登录用户访问非登录页 → 重定向到登录页
+    if (to.path !== '/Login' && !tokenStore.token) {
+        next('/Login')
+        return
+    }
+    next()
+})
 
 //导出路由
 export default router

@@ -37,16 +37,15 @@ const rules={
     ]    
 }
 const register = async()=>{
-    let result = await userRegisterService(registerData.value);
-    // if(result.code === 0)
-    // {
-    //     alert(result.msg?result.msg:'注册成功');
-    // }else{
-    //     alert('注册失败');
-    // }
-    //    alert(result.msg?result.msg:'注册成功');
-        ElMessage.success(result.msg?result.msg:'注册成功')
-
+    try {
+        let result = await userRegisterService(registerData.value);
+        ElMessage.success(result.message || '注册成功')
+        // 注册成功后自动切换到登录
+        isRegister.value = false
+        clearRegisterData()
+    } catch (error) {
+        ElMessage.error(error.message || '注册失败，请重试')
+    }
 }
 //绑定数据
 //表单数据校验
@@ -55,19 +54,16 @@ import {useRouter}from 'vue-router'
 const router = useRouter()
 const tokenStore =  useTokenStore();
 const login = async()=>{
-    let result = await userLoginService(registerData.value);
-//     if(result.code === 0)
-//     {
-//         alert(result.msg?result.msg:'登陆成功');
-//     }else{
-//         alert('登录失败');
-//     } 
-//   alert(result.msg?result.msg:'登陆成功'); 
-     ElMessage.success(result.msg?result.msg:'登陆成功')   
-    //把得到的token存储到pinia中
-    tokenStore.setToken(result.data)
-     //跳转到首页
-    router.push('/')
+    try {
+        let result = await userLoginService(registerData.value);
+        ElMessage.success(result.message || '登陆成功')
+        //把得到的token存储到pinia中
+        tokenStore.setToken(result.data)
+        //跳转到首页
+        router.push('/')
+    } catch (error) {
+        ElMessage.error(error.message || '登录失败，请检查用户名和密码')
+    }
  }
   
 
