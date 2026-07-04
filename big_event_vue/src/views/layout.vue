@@ -48,7 +48,7 @@ const menuTitleMap = {
     '/show/manage': '展示界面',
     '/artifacts/manage': '文物信息总览',
     '/tomb/manage': '墓葬总览',
-    '/tomb/basic': '基本信息',
+    '/tomb/basic': '基本资料',
     '/tomb/excavation': '墓葬出土',
     '/tomb/coffin': '棺信息',
     '/tomb/chariot': '车信息',
@@ -109,7 +109,7 @@ const handleCommand = (command) => {
                         <span>墓葬信息</span>
                     </template>
                     <el-menu-item index="/tomb/manage">墓葬总览</el-menu-item>
-                    <el-menu-item index="/tomb/basic">基本信息</el-menu-item>
+                    <el-menu-item index="/tomb/basic">基本资料</el-menu-item>
                     <el-menu-item index="/tomb/excavation">墓葬出土</el-menu-item>
                     <el-menu-item index="/tomb/coffin">棺信息</el-menu-item>
                     <el-menu-item index="/tomb/chariot">车信息</el-menu-item>

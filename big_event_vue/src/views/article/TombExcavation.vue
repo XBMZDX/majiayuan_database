@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { artifactsBatchImportService } from '@/api/Artifacts.js'
@@ -33,7 +33,17 @@ const loadBurialData = async () => {
     ])
     stats.value = statsRes.data || { total: 0, materials: [], completeness: [] }
     artifacts.value = artRes.data || []
+    pageNum.value = 1
 }
+
+// 分页（前端分页）
+const pageNum = ref(1)
+const pageSize = ref(10)
+const pagedArtifacts = computed(() => {
+    const start = (pageNum.value - 1) * pageSize.value
+    return artifacts.value.slice(start, start + pageSize.value)
+})
+const onPageChange = (num) => { pageNum.value = num }
 
 // 详情
 const detailVisible = ref(false)
@@ -134,7 +144,7 @@ onMounted(() => { fetchBurialList() })
         <!-- 顶部墓葬切换器 + 操作按钮 -->
         <div class="toolbar">
             <el-select v-model="selectedBurialId" placeholder="请选择墓葬" @change="loadBurialData" style="width:340px" size="large">
-                <el-option v-for="b in burialList" :key="b.id" :label="(b.burialNo || '') + ' ' + b.name" :value="b.id" />
+                <el-option v-for="b in burialList" :key="b.id" :label="b.name && b.name !== b.burialNo ? b.burialNo + ' ' + b.name : b.burialNo" :value="b.id" />
             </el-select>
             <div class="toolbar-actions">
                 <el-button type="primary" @click="addVisible = true">添加文物</el-button>
@@ -175,7 +185,7 @@ onMounted(() => { fetchBurialList() })
                     <el-button @click="cancelBatchMode">取消</el-button>
                 </div>
             </div>
-            <el-table :data="artifacts" style="width:100%" @selection-change="handleSelectionChange" ref="selectionRef">
+            <el-table :data="pagedArtifacts" style="width:100%" @selection-change="handleSelectionChange" ref="selectionRef">
                 <el-table-column v-if="batchMode" type="selection" width="50" />
                 <el-table-column label="序号" prop="serialNumber" width="60" />
                 <el-table-column label="文物编号" width="140">
@@ -195,6 +205,12 @@ onMounted(() => { fetchBurialList() })
                 </el-table-column>
                 <template #empty><el-empty description="该墓葬暂无出土文物" /></template>
             </el-table>
+            <el-pagination
+                v-model:current-page="pageNum" v-model:page-size="pageSize"
+                :page-sizes="[10, 20, 50]" layout="total, sizes, prev, pager, next"
+                :total="artifacts.length" background style="margin-top:16px;justify-content:flex-end"
+                @current-change="onPageChange"
+            />
         </el-card>
     </div>
 

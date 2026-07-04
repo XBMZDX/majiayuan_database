@@ -95,7 +95,7 @@ onMounted(() => { fetchBurialList() })
         <div class="tomb-grid" v-if="burialList.length > 0">
             <div class="tomb-card" v-for="b in burialList" :key="b.id" @dblclick="openDetail(b)">
                 <div class="card-header">
-                    <span class="card-title">{{ b.burialNo }} {{ b.name }}</span>
+                    <span class="card-title">{{ b.name && b.name !== b.burialNo ? b.burialNo + ' ' + b.name : b.burialNo }}</span>
                     <el-tag :type="b.status === '已发掘' ? 'success' : b.status === '发掘中' ? 'warning' : 'danger'" size="small">{{ b.status }}</el-tag>
                 </div>
                 <el-divider style="margin:8px 0" />
