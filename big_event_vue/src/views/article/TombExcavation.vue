@@ -104,8 +104,9 @@ const downloadTemplate = () => {
         '存放方式', '存放地点', '文物流转过程', '修复、复原状况',
         '拍照人', '绘图人', '文字描述人', '备注', '定级情况', '科技检测情况']
     const ws = XLSX.utils.aoa_to_sheet([headers])
-    XLSX.utils.book_append_sheet(XLSX.utils.book_new(), ws, '文物导入模板')
-    XLSX.writeFile(XLSX.utils.book_new(), '文物导入模板.xlsx')
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '文物导入模板')
+    XLSX.writeFile(wb, '文物导入模板.xlsx')
 }
 
 // 添加文物弹窗（与文物信息总览字段完全一致）
