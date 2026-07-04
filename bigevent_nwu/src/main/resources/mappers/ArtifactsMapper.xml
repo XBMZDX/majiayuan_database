@@ -31,7 +31,6 @@
             <if test="excavationPosition != null">excavation_position = #{excavationPosition},</if>
             <if test="excavationTime != null">excavation_time = #{excavationTime},</if>
             <if test="storageMethod != null">storage_method = #{storageMethod},</if>
-            <if test="storageLocation != null">storage_location = #{storageLocation},</if>
             <if test="images != null">images = #{images},</if>
             <if test="transferProcess != null">transfer_process = #{transferProcess},</if>
             <if test="restorationStatus != null">restoration_status = #{restorationStatus},</if>
@@ -66,6 +65,6 @@
                 AND completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
-        ORDER BY serial_number ASC
+        ORDER BY CAST(serial_number AS UNSIGNED) ASC
     </select>
 </mapper>

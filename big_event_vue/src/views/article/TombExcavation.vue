@@ -82,7 +82,6 @@ const handleImport = async () => {
             quantity2: item['数量2'] || null, dimensions: item['尺寸'] || '',
             weight: item['重量'] || '', excavationRelic: item['出土遗迹'] || '',
             excavationPosition: item['出土位置'] || '', excavationTime: item['出土时间'] || '',
-            storageMethod: item['存放方式'] || '', storageLocation: item['存放地点'] || '',
             transferProcess: item['文物流转过程'] || '', restorationStatus: item['修复、复原状况'] || '',
             photographer: item['拍照人'] || '', draftsperson: item['绘图人'] || '',
             textDescriber: item['文字描述人'] || '', notes: item['备注'] || '',
@@ -99,9 +98,9 @@ const handleImport = async () => {
 // 下载模板
 const downloadTemplate = () => {
     const headers = ['序号', '文物新编号', '文物新名称', '文物原始编号', '文物原名称',
-        '材质1', '材质2', '完整度', '数量1', '数量2',
+        '材质1', '材质2', '完整度', '视觉特征', '数量1', '数量2',
         '尺寸', '重量', '出土遗迹', '出土位置', '出土时间',
-        '存放方式', '存放地点', '文物流转过程', '修复、复原状况',
+        '存放方式', '文物流转过程', '修复复原状况',
         '拍照人', '绘图人', '文字描述人', '备注', '定级情况', '科技检测情况']
     const ws = XLSX.utils.aoa_to_sheet([headers])
     const wb = XLSX.utils.book_new()
@@ -116,7 +115,6 @@ const addForm = ref({
     material1: '', material2: '', completeness: '', artifactDescription: '',
     quantity1: null, quantity2: null, dimensions: '', weight: '',
     excavationRelic: '', excavationPosition: '', excavationTime: '',
-    storageMethod: '', storageLocation: '', images: '',
     transferProcess: '', restorationStatus: '',
     photographer: '', draftsperson: '', textDescriber: '',
     notes: '', gradingStatus: '', testingStatus: ''
@@ -191,7 +189,6 @@ onMounted(() => { fetchBurialList() })
                 <el-table-column label="材质" prop="material1" width="120" />
                 <el-table-column label="完整度" prop="completeness" width="80" />
                 <el-table-column label="数量" prop="quantity1" width="70" />
-                <el-table-column label="存放地点" prop="storageLocation" width="120" />
                 <el-table-column label="科技检测情况" prop="testingStatus" width="140" />
                 <el-table-column label="操作" width="80" fixed="right">
                     <template #default="{ row }"><el-link type="primary" @click="openDetail(row)">详情</el-link></template>
@@ -220,7 +217,6 @@ onMounted(() => { fetchBurialList() })
             <el-descriptions-item label="出土位置">{{ detailData.excavationPosition || '-' }}</el-descriptions-item>
             <el-descriptions-item label="出土时间">{{ detailData.excavationTime || '-' }}</el-descriptions-item>
             <el-descriptions-item label="存放方式">{{ detailData.storageMethod || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="存放地点">{{ detailData.storageLocation || '-' }}</el-descriptions-item>
             <el-descriptions-item label="拍照人">{{ detailData.photographer || '-' }}</el-descriptions-item>
             <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '-' }}</el-descriptions-item>
             <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '-' }}</el-descriptions-item>
@@ -229,7 +225,7 @@ onMounted(() => { fetchBurialList() })
             <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '-' }}</el-descriptions-item>
             <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '-' }}</el-descriptions-item>
             <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物描述" :span="2"><div v-html="detailData.artifactDescription || '-'" /></el-descriptions-item>
+            <el-descriptions-item label="视觉特征" :span="2"><div v-html="detailData.artifactDescription || '-'" /></el-descriptions-item>
         </el-descriptions>
     </el-drawer>
 
@@ -244,6 +240,7 @@ onMounted(() => { fetchBurialList() })
                 <el-col :span="12"><el-form-item label="材质1"><el-input v-model="addForm.material1" placeholder="请输入材质" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="材质2"><el-input v-model="addForm.material2" placeholder="请输入材质2" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="完整度"><el-input v-model="addForm.completeness" placeholder="请输入完整度" /></el-form-item></el-col>
+                <el-col :span="24"><el-form-item label="视觉特征"><el-input v-model="addForm.artifactDescription" type="textarea" :rows="2" placeholder="请输入视觉特征" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="数量1"><el-input v-model="addForm.quantity1" placeholder="请输入数量1" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="数量2"><el-input v-model="addForm.quantity2" placeholder="请输入数量2" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="尺寸"><el-input v-model="addForm.dimensions" placeholder="请输入尺寸" /></el-form-item></el-col>
@@ -252,7 +249,6 @@ onMounted(() => { fetchBurialList() })
                 <el-col :span="12"><el-form-item label="出土位置"><el-input v-model="addForm.excavationPosition" placeholder="请输入出土位置" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="出土时间"><el-input v-model="addForm.excavationTime" placeholder="请输入出土时间" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="存放方式"><el-input v-model="addForm.storageMethod" placeholder="请输入存放方式" /></el-form-item></el-col>
-                <el-col :span="12"><el-form-item label="存放地点"><el-input v-model="addForm.storageLocation" placeholder="请输入存放地点" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="文物流转过程"><el-input v-model="addForm.transferProcess" placeholder="请输入流转过程" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="修复复原状况"><el-input v-model="addForm.restorationStatus" placeholder="请输入修复状况" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="拍照人"><el-input v-model="addForm.photographer" placeholder="请输入拍照人" /></el-form-item></el-col>
@@ -260,7 +256,6 @@ onMounted(() => { fetchBurialList() })
                 <el-col :span="12"><el-form-item label="文字描述人"><el-input v-model="addForm.textDescriber" placeholder="请输入文字描述人" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="定级情况"><el-input v-model="addForm.gradingStatus" placeholder="请输入定级情况" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="科技检测情况"><el-input v-model="addForm.testingStatus" placeholder="请输入检测情况" /></el-form-item></el-col>
-                <el-col :span="24"><el-form-item label="文物描述"><el-input v-model="addForm.artifactDescription" type="textarea" :rows="2" placeholder="请输入文物描述" /></el-form-item></el-col>
                 <el-col :span="24"><el-form-item label="备注"><el-input v-model="addForm.notes" type="textarea" :rows="2" placeholder="请输入备注" /></el-form-item></el-col>
             </el-row>
         </el-form>

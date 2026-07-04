@@ -8,7 +8,7 @@ import java.util.List;
 @Mapper
 public interface ArtifactsMapper {
     // 添加文物
-    @Insert("INSERT INTO artifacts (burial_id, serial_number, new_artifact_code, new_artifact_name, original_artifact_code, original_artifact_name, material1, material2, completeness, artifact_description, quantity1, quantity2, dimensions, weight, excavation_relic, excavation_position, excavation_time, storage_method, storage_location, images, transfer_process, restoration_status, photographer, draftsperson, text_describer, notes, grading_status, testing_status, created_by, create_time, update_time) VALUES (#{burialId}, #{serialNumber}, #{newArtifactCode}, #{newArtifactName}, #{originalArtifactCode}, #{originalArtifactName}, #{material1}, #{material2}, #{completeness}, #{artifactDescription}, #{quantity1}, #{quantity2}, #{dimensions}, #{weight}, #{excavationRelic}, #{excavationPosition}, #{excavationTime}, #{storageMethod}, #{storageLocation}, #{images}, #{transferProcess}, #{restorationStatus}, #{photographer}, #{draftsperson}, #{textDescriber}, #{notes}, #{gradingStatus}, #{testingStatus}, #{createdBy}, #{createTime}, #{updateTime})")
+    @Insert("INSERT INTO artifacts (burial_id, serial_number, new_artifact_code, new_artifact_name, original_artifact_code, original_artifact_name, material1, material2, completeness, artifact_description, quantity1, quantity2, dimensions, weight, excavation_relic, excavation_position, excavation_time, storage_method, images, transfer_process, restoration_status, photographer, draftsperson, text_describer, notes, grading_status, testing_status, created_by, create_time, update_time) VALUES (#{burialId}, #{serialNumber}, #{newArtifactCode}, #{newArtifactName}, #{originalArtifactCode}, #{originalArtifactName}, #{material1}, #{material2}, #{completeness}, #{artifactDescription}, #{quantity1}, #{quantity2}, #{dimensions}, #{weight}, #{excavationRelic}, #{excavationPosition}, #{excavationTime}, #{storageMethod}, #{images}, #{transferProcess}, #{restorationStatus}, #{photographer}, #{draftsperson}, #{textDescriber}, #{notes}, #{gradingStatus}, #{testingStatus}, #{createdBy}, #{createTime}, #{updateTime})")
     void add(artifacts artifact);
 
     // 根据ID删除文物
@@ -20,7 +20,7 @@ public interface ArtifactsMapper {
     Integer getSerialNumberById(Integer id);
 
     // 查询当前最大序号（用于新增时追加）
-    @Select("SELECT COALESCE(MAX(serial_number), 0) FROM artifacts")
+    @Select("SELECT COALESCE(MAX(CAST(serial_number AS UNSIGNED)), 0) FROM artifacts")
     Integer getMaxSerialNumber();
 
     // 查询第一个空缺序号（找到最小的 sn 使得 sn+1 不存在）
@@ -35,7 +35,7 @@ public interface ArtifactsMapper {
     void batchDelete(List<Integer> ids);
 
     // 批量删除后重新编号所有序号（按当前序号升序依次赋予1,2,3...）
-    @Update("UPDATE artifacts SET serial_number = (@num := @num + 1) ORDER BY serial_number ASC")
+    @Update("UPDATE artifacts SET serial_number = (@num := @num + 1) ORDER BY CAST(serial_number AS UNSIGNED) ASC")
     void renumberAllSerialNumbers();
 
     // 初始化 MySQL 用户变量
@@ -49,7 +49,7 @@ public interface ArtifactsMapper {
     List<artifacts> list(String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
 
     // 按墓葬查询文物列表
-    @Select("SELECT * FROM artifacts WHERE burial_id = #{burialId} ORDER BY serial_number ASC")
+    @Select("SELECT * FROM artifacts WHERE burial_id = #{burialId} ORDER BY CAST(serial_number AS UNSIGNED) ASC")
     List<artifacts> listByBurial(Integer burialId);
 
     // 墓葬文物总数

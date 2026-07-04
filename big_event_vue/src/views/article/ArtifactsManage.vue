@@ -162,7 +162,6 @@ const getDefaultForm = () => ({
     excavationPosition: '',
     excavationTime: '',
     storageMethod: '',
-    storageLocation: '',
     images: '',
     transferProcess: '',
     restorationStatus: '',
@@ -310,9 +309,9 @@ const handleFileChange = (file) => { importFile.value = file.raw; importResult.v
 // 下载导入模板
 const downloadTemplate = () => {
     const headers = ['序号', '文物新编号', '文物新名称', '文物原始编号', '文物原名称',
-        '材质1', '材质2', '完整度', '文物描述2', '数量1', '数量2',
+        '材质1', '材质2', '完整度', '视觉特征', '数量1', '数量2',
         '尺寸', '重量', '出土遗迹', '出土位置', '出土时间',
-        '存放方式', '存放地点', '图片', '文物流转过程', '修复、复原状况',
+        '存放方式', '文物流转过程', '修复复原状况',
         '拍照人', '绘图人', '文字描述人', '备注', '定级情况', '科技检测情况']
     const ws = XLSX.utils.aoa_to_sheet([headers])
     const wb = XLSX.utils.book_new()
@@ -355,7 +354,6 @@ const handleImport = async () => {
                     excavationPosition: item['出土位置\\n'] || item['出土位置'] || '',
                     excavationTime: item['出土时间\\n'] || item['出土时间'] || '',
                     storageMethod: item['存放方式\\n'] || item['存放方式'] || '',
-                    storageLocation: item['存放地点'] || '',
                     images: item['图片\\n'] || item['图片'] || '',
                     transferProcess: item['文物流转过程\\n'] || item['文物流转过程'] || '',
                     restorationStatus: item['修复、\\n复原状况\\n'] || item['修复、复原状况'] || '',
@@ -454,7 +452,6 @@ const handleImport = async () => {
             <el-table-column label="材质" prop="material1" width="120" />
             <el-table-column label="完整度" prop="completeness" width="80" />
             <el-table-column label="数量" prop="quantity1" width="70" />
-            <el-table-column label="存放地点" prop="storageLocation" width="120" />
             <el-table-column label="科技检测情况" prop="testingStatus" width="140" />
             <el-table-column label="操作" width="80" fixed="right">
                 <template #default="{ row }">
@@ -488,6 +485,9 @@ const handleImport = async () => {
                     <el-form-item label="完整度">
                         <el-input v-model="ArtifactsModel.completeness" placeholder="请输入完整度" />
                     </el-form-item>
+                    <el-form-item label="视觉特征">
+                        <div class="editor"><quill-editor theme="snow" v-model:content="ArtifactsModel.artifactDescription" contentType="html" /></div>
+                    </el-form-item>
                     <el-form-item label="数量1"><el-input v-model="ArtifactsModel.quantity1" placeholder="请输入数量1" /></el-form-item>
                     <el-form-item label="数量2"><el-input v-model="ArtifactsModel.quantity2" placeholder="请输入数量2" /></el-form-item>
                     <el-form-item label="尺寸"><el-input v-model="ArtifactsModel.dimensions" placeholder="请输入尺寸" /></el-form-item>
@@ -498,7 +498,6 @@ const handleImport = async () => {
                 </el-col>
                 <el-col :span="12">
                     <el-form-item label="存放方式"><el-input v-model="ArtifactsModel.storageMethod" placeholder="请输入存放方式" /></el-form-item>
-                    <el-form-item label="存放地点"><el-input v-model="ArtifactsModel.storageLocation" placeholder="请输入存放地点" /></el-form-item>
                     <el-form-item label="文物流转过程"><el-input v-model="ArtifactsModel.transferProcess" type="textarea" :rows="2" placeholder="请输入流转过程" /></el-form-item>
                     <el-form-item label="修复复原状况"><el-input v-model="ArtifactsModel.restorationStatus" placeholder="请输入修复状况" /></el-form-item>
                     <el-form-item label="拍照人"><el-input v-model="ArtifactsModel.photographer" placeholder="请输入拍照人" /></el-form-item>
@@ -507,9 +506,6 @@ const handleImport = async () => {
                     <el-form-item label="定级情况"><el-input v-model="ArtifactsModel.gradingStatus" placeholder="请输入定级情况" /></el-form-item>
                     <el-form-item label="科技检测情况"><el-input v-model="ArtifactsModel.testingStatus" placeholder="请输入检测情况" /></el-form-item>
                     <el-form-item label="备注"><el-input v-model="ArtifactsModel.notes" type="textarea" :rows="2" placeholder="请输入备注" /></el-form-item>
-                    <el-form-item label="文物描述">
-                        <div class="editor"><quill-editor theme="snow" v-model:content="ArtifactsModel.artifactDescription" contentType="html" /></div>
-                    </el-form-item>
                     <el-form-item label="图片">
                         <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
                             name="file" :headers="{ 'Authorization': tokenStore.token }" :on-success="uploadSuccess">
@@ -542,6 +538,9 @@ const handleImport = async () => {
                     <el-form-item label="完整度">
                         <el-input v-model="editData.completeness" />
                     </el-form-item>
+                    <el-form-item label="视觉特征">
+                        <div class="editor"><quill-editor :key="editData.id || 'new'" theme="snow" v-model:content="editData.artifactDescription" contentType="html" /></div>
+                    </el-form-item>
                     <el-form-item label="数量1"><el-input v-model="editData.quantity1" /></el-form-item>
                     <el-form-item label="数量2"><el-input v-model="editData.quantity2" /></el-form-item>
                     <el-form-item label="尺寸"><el-input v-model="editData.dimensions" /></el-form-item>
@@ -552,7 +551,6 @@ const handleImport = async () => {
                 </el-col>
                 <el-col :span="12">
                     <el-form-item label="存放方式"><el-input v-model="editData.storageMethod" /></el-form-item>
-                    <el-form-item label="存放地点"><el-input v-model="editData.storageLocation" /></el-form-item>
                     <el-form-item label="文物流转过程"><el-input v-model="editData.transferProcess" type="textarea" :rows="2" /></el-form-item>
                     <el-form-item label="修复复原状况"><el-input v-model="editData.restorationStatus" /></el-form-item>
                     <el-form-item label="拍照人"><el-input v-model="editData.photographer" /></el-form-item>
@@ -561,9 +559,6 @@ const handleImport = async () => {
                     <el-form-item label="定级情况"><el-input v-model="editData.gradingStatus" /></el-form-item>
                     <el-form-item label="科技检测情况"><el-input v-model="editData.testingStatus" /></el-form-item>
                     <el-form-item label="备注"><el-input v-model="editData.notes" type="textarea" :rows="2" /></el-form-item>
-                    <el-form-item label="文物描述">
-                        <div class="editor"><quill-editor :key="editData.id || 'new'" theme="snow" v-model:content="editData.artifactDescription" contentType="html" /></div>
-                    </el-form-item>
                     <el-form-item label="图片">
                         <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
                             name="file" :headers="{ 'Authorization': tokenStore.token }" :on-success="(res) => { editData.images = res.data }">
@@ -601,7 +596,6 @@ const handleImport = async () => {
                 <el-descriptions-item label="出土位置">{{ detailData.excavationPosition || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="出土时间">{{ detailData.excavationTime || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="存放方式">{{ detailData.storageMethod || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="存放地点">{{ detailData.storageLocation || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="拍照人">{{ detailData.photographer || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '—' }}</el-descriptions-item>
@@ -610,7 +604,7 @@ const handleImport = async () => {
                 <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="文物描述" :span="2"><div v-html="detailData.artifactDescription || '—'" /></el-descriptions-item>
+                <el-descriptions-item label="视觉特征" :span="2"><div v-html="detailData.artifactDescription || '—'" /></el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ detailData.createTime || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="更新时间">{{ detailData.updateTime || '—' }}</el-descriptions-item>
             </el-descriptions>
@@ -635,6 +629,9 @@ const handleImport = async () => {
                         <el-form-item label="完整度">
                             <el-input v-model="detailData.completeness" />
                         </el-form-item>
+                        <el-form-item label="视觉特征">
+                            <div class="editor"><quill-editor :key="'detail-' + detailData.id" theme="snow" v-model:content="detailData.artifactDescription" contentType="html" /></div>
+                        </el-form-item>
                         <el-form-item label="数量1"><el-input v-model="detailData.quantity1" /></el-form-item>
                         <el-form-item label="数量2"><el-input v-model="detailData.quantity2" /></el-form-item>
                         <el-form-item label="尺寸"><el-input v-model="detailData.dimensions" /></el-form-item>
@@ -645,7 +642,6 @@ const handleImport = async () => {
                     </el-col>
                     <el-col :span="12">
                         <el-form-item label="存放方式"><el-input v-model="detailData.storageMethod" /></el-form-item>
-                        <el-form-item label="存放地点"><el-input v-model="detailData.storageLocation" /></el-form-item>
                         <el-form-item label="文物流转过程"><el-input v-model="detailData.transferProcess" type="textarea" :rows="2" /></el-form-item>
                         <el-form-item label="修复复原状况"><el-input v-model="detailData.restorationStatus" /></el-form-item>
                         <el-form-item label="拍照人"><el-input v-model="detailData.photographer" /></el-form-item>
@@ -654,9 +650,6 @@ const handleImport = async () => {
                         <el-form-item label="定级情况"><el-input v-model="detailData.gradingStatus" /></el-form-item>
                         <el-form-item label="科技检测情况"><el-input v-model="detailData.testingStatus" /></el-form-item>
                         <el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item>
-                        <el-form-item label="文物描述">
-                            <div class="editor"><quill-editor :key="'detail-' + detailData.id" theme="snow" v-model:content="detailData.artifactDescription" contentType="html" /></div>
-                        </el-form-item>
                         <el-form-item label="图片">
                             <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
                                 name="file" :headers="{ 'Authorization': tokenStore.token }" :on-success="(res) => { detailData.images = res.data }">

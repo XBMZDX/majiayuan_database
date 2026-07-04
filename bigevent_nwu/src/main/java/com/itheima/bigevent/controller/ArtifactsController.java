@@ -31,6 +31,13 @@ public class ArtifactsController {
         return Result.success();
     }
 
+    // 批量导入文物
+    @PostMapping("/batch")
+    public Result batchImport(@RequestBody List<artifacts> list) {
+        for (artifacts a : list) artifactsService.add(a);
+        return Result.success();
+    }
+
     // 批量删除文物
     @PostMapping("/batch-delete")
     public Result batchDelete(@RequestBody List<Integer> ids) {

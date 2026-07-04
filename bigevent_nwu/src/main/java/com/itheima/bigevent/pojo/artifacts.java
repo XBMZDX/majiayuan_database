@@ -20,15 +20,14 @@ public class artifacts {
     private String material2;           // 材质2
     private String completeness;        // 完整度
     private String artifactDescription; // 文物描述2
-    private Integer quantity1;          // 数量1
-    private Integer quantity2;          // 数量2
+    private String quantity1;           // 数量1
+    private String quantity2;           // 数量2
     private String dimensions;          // 尺寸
     private String weight;              // 重量
     private String excavationRelic;     // 出土遗迹
     private String excavationPosition;  // 出土位置
     private String excavationTime;      // 出土时间
     private String storageMethod;       // 存放方式
-    private String storageLocation;     // 存放地点
     private String images;              // 图片
     private String transferProcess;     // 文物流转过程
     private String restorationStatus;   // 修复、复原状况
