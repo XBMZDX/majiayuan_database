@@ -6,6 +6,10 @@ import ArtifactsManage from '@/views/article/ArtifactsManage.vue'
 import show from '@/views/article/show.vue'
 import TombManage from '@/views/article/TombManage.vue'
 import TombExcavation from '@/views/article/TombExcavation.vue'
+import CoffinBasic from '@/views/article/CoffinBasic.vue'
+import CoffinArtifacts from '@/views/article/CoffinArtifacts.vue'
+import ChariotBasic from '@/views/article/ChariotBasic.vue'
+import ChariotArtifacts from '@/views/article/ChariotArtifacts.vue'
 import DetectionAnalysis from '@/views/article/DetectionAnalysis.vue'
 import Conservation from '@/views/article/Conservation.vue'
 import Restoration from '@/views/article/Restoration.vue'
@@ -25,7 +29,11 @@ const routes = [
         {path:'/tomb/basic',component:TombManage},
         {path:'/tomb/excavation',component:TombExcavation},
         {path:'/tomb/coffin',component:TombManage},
+        {path:'/tomb/coffin/basic',component:CoffinBasic},
+        {path:'/tomb/coffin/artifacts',component:CoffinArtifacts},
         {path:'/tomb/chariot',component:TombManage},
+        {path:'/tomb/chariot/basic',component:ChariotBasic},
+        {path:'/tomb/chariot/artifacts',component:ChariotArtifacts},
         {path:'/detection/manage',component:DetectionAnalysis},
         {path:'/conservation/manage',component:Conservation},
         {path:'/restoration/manage',component:Restoration},
