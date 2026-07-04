@@ -1,13 +1,20 @@
 <script setup>
+import { computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import {
-    Management,
     Promotion,
     UserFilled,
     User,
     Crop,
     EditPen,
     SwitchButton,
-    CaretBottom
+    CaretBottom,
+    Document,
+    Box,
+    Monitor,
+    Umbrella,
+    Reading,
+    ChatDotSquare
 } from '@element-plus/icons-vue'
 import avatar from '@/assets/default.png'
 
@@ -24,56 +31,55 @@ const getUserInfo = async () => {
     if (!tokenStore.token) return
     try {
         let result = await userInfoService();
-        //存储pinia
         userInfoStore.info = result.data;
     } catch (error) {
-        // 获取用户信息失败，不影响页面渲染
         console.error('获取用户信息失败:', error)
     }
 }
 getUserInfo()
-//条目被点击过后被掉用的函数
-import { useRouter } from 'vue-router'
+
+//导入路由用于跳转和获取当前页面标题
 import { ElMessage, ElMessageBox } from 'element-plus'
 const router = useRouter();
+const route = useRoute();
+
+// 侧边栏菜单名称与路由的映射
+const menuTitleMap = {
+    '/show/manage': '展示界面',
+    '/artifacts/manage': '文物信息总览',
+    '/tomb/manage': '墓葬总览',
+    '/tomb/basic': '基本信息',
+    '/tomb/excavation': '墓葬出土',
+    '/tomb/coffin': '棺信息',
+    '/tomb/chariot': '车信息',
+    '/detection/manage': '文物检测分析',
+    '/conservation/manage': '文物保护',
+    '/restoration/manage': '文物复原',
+    '/library/manage': '电子图书馆',
+    '/ai/manage': 'AI对话',
+    '/user/info': '基本资料',
+    '/user/avatar': '更换头像',
+    '/user/resetPassword': '重置密码'
+}
+
+// 当前页面标题（从当前路由路径计算）
+const pageTitle = computed(() => menuTitleMap[route.path] || '文物信息总览')
+
 const handleCommand = (command) => {
-    //判断指令
     if (command === 'logout') {
-        //退出登录
-
-
         ElMessageBox.confirm(
             '您确认退出登录吗？',
             '温馨提示',
-            {
-                confirmButtonText: '确认',
-                cancelButtonText: '取消',
-                type: 'warning',
-            }
+            { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
         )
-
-
-
             .then(async () => {
-                //调用接口
                 tokenStore.removeToken();
                 userInfoStore.removeInfo();
                 router.push('/login')
-                ElMessage({
-                    type: 'success',
-                    message: '退出登录成功',
-                })
-                //刷新列表
-
+                ElMessage({ type: 'success', message: '退出登录成功' })
             })
-            .catch(() => {
-                ElMessage({
-                    type: 'info',
-                    message: '已取消',
-                })
-            })
+            .catch(() => { ElMessage({ type: 'info', message: '已取消' }) })
     } else {
-        //路由
         router.push('/user/' + command)
     }
 }
@@ -87,38 +93,46 @@ const handleCommand = (command) => {
         <el-aside width="200px">
             <div class="el-aside__logo"></div>
             <!-- 菜单标签 -->
-            <el-menu active-text-color="#ffd04b" background-color="#232323" text-color="#fff" router> 
+            <el-menu active-text-color="#ffd04b" background-color="#1668C4" text-color="#fff" router>
                 <!-- 展示的对应组件访问的路径 -->
                 <el-menu-item index="/show/manage">
-                    <el-icon>
-                        <Promotion />
-                    </el-icon>
+                    <el-icon><Promotion /></el-icon>
                     <span>展示界面</span>
                 </el-menu-item>
-                <el-menu-item index="/site/manage">
-                    <el-icon>
-                        <Management />
-                    </el-icon>
-                    <span>遗址管理</span>
-                </el-menu-item>
-
-                <el-menu-item index="/relics/manage">
-                    <el-icon>
-                        <Promotion />
-                    </el-icon>
-                    <span>遗迹管理</span>
-                </el-menu-item>
                 <el-menu-item index="/artifacts/manage">
-                    <el-icon>
-                        <Promotion />
-                    </el-icon>
+                    <el-icon><Document /></el-icon>
                     <span>文物信息总览</span>
                 </el-menu-item>
-                <el-menu-item index="/artifact-detection/manage">
-                    <el-icon>
-                        <Promotion />
-                    </el-icon>
-                    <span>文物检测信息</span>
+                <el-sub-menu index="/tomb">
+                    <template #title>
+                        <el-icon><Box /></el-icon>
+                        <span>墓葬信息</span>
+                    </template>
+                    <el-menu-item index="/tomb/manage">墓葬总览</el-menu-item>
+                    <el-menu-item index="/tomb/basic">基本信息</el-menu-item>
+                    <el-menu-item index="/tomb/excavation">墓葬出土</el-menu-item>
+                    <el-menu-item index="/tomb/coffin">棺信息</el-menu-item>
+                    <el-menu-item index="/tomb/chariot">车信息</el-menu-item>
+                </el-sub-menu>
+                <el-menu-item index="/detection/manage">
+                    <el-icon><Monitor /></el-icon>
+                    <span>文物检测分析</span>
+                </el-menu-item>
+                <el-menu-item index="/conservation/manage">
+                    <el-icon><Umbrella /></el-icon>
+                    <span>文物保护</span>
+                </el-menu-item>
+                <el-menu-item index="/restoration/manage">
+                    <el-icon><Umbrella /></el-icon>
+                    <span>文物复原</span>
+                </el-menu-item>
+                <el-menu-item index="/library/manage">
+                    <el-icon><Reading /></el-icon>
+                    <span>电子图书馆</span>
+                </el-menu-item>
+                <el-menu-item index="/ai/manage">
+                    <el-icon><ChatDotSquare /></el-icon>
+                    <span>AI对话</span>
                 </el-menu-item>
                 <el-sub-menu index="/user">
                     <template #title>
@@ -149,21 +163,24 @@ const handleCommand = (command) => {
                     </el-menu-item>
                 </el-sub-menu>
             </el-menu>
+
         </el-aside>
         <!-- 右侧主区域 -->
         <el-container>
-            <!-- 头部区域 -->
-            <el-header>
-                <div>登陆人：<strong>{{ userInfoStore.info.nickname }}</strong></div>
-                <!-- 下拉菜单-->
-                <!--command: 条目被点击后会触发，在事件函数上可以声明一个函数，接收条目对应的指令-->
+            <!-- 头部区域：通栏导航 -->
+            <el-header class="top-header">
+                <!-- 左侧：小图标 + 当前页面标题 -->
+                <div class="header-left">
+                    <el-icon :size="18" color="#1668C4"><Promotion /></el-icon>
+                    <span class="page-title">{{ pageTitle }}</span>
+                </div>
+                <!-- 右侧：用户信息下拉按钮 -->
                 <el-dropdown placement="bottom-end" @command="handleCommand">
-                    <span class="el-dropdown__box">
-                        <el-avatar :src="userInfoStore.info.user_pic ? userInfoStore.info.user_pic : avatar" />
-                        <el-icon>
-                            <CaretBottom />
-                        </el-icon>
-                    </span>
+                    <div class="user-btn">
+                        <el-avatar :size="28" :src="userInfoStore.info.user_pic || avatar" />
+                        <span class="user-name">{{ userInfoStore.info.nickname || '未登录' }}</span>
+                        <el-icon :size="12"><CaretBottom /></el-icon>
+                    </div>
                     <template #dropdown>
                         <el-dropdown-menu>
                             <el-dropdown-item command="info" :icon="User">基本资料</el-dropdown-item>
@@ -179,8 +196,6 @@ const handleCommand = (command) => {
                 <!-- 声明router-view标签 -->
                 <router-view></router-view>
             </el-main>
-            <!-- 底部区域 -->
-            <el-footer> 马家塬文物数据库©2023 Created by 王飞洋</el-footer>
         </el-container>
     </el-container>
 </template>
@@ -190,7 +205,7 @@ const handleCommand = (command) => {
     height: 100vh;
 
     .el-aside {
-        background-color: #232323;
+        background-color: #1668C4;
 
         &__logo {
             height: 120px;
@@ -202,34 +217,38 @@ const handleCommand = (command) => {
         }
     }
 
-    .el-header {
+    .top-header {
         background-color: #fff;
         display: flex;
         align-items: center;
         justify-content: space-between;
-
-        .el-dropdown__box {
-            display: flex;
-            align-items: center;
-
-            .el-icon {
-                color: #999;
-                margin-left: 10px;
-            }
-
-            &:active,
-            &:focus {
-                outline: none;
-            }
-        }
+        padding: 0 20px;
+        border-bottom: 1px solid #E5E6EB;
+        height: 52px;
     }
-
-    .el-footer {
+    .header-left {
         display: flex;
         align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        color: #666;
+        gap: 8px;
     }
+    .page-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #1D2129;
+    }
+    .user-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px;
+        background: #F2F3F5;
+        border-radius: 20px;
+        cursor: pointer;
+    }
+    .user-name {
+        font-size: 13px;
+        color: #4E5969;
+    }
+    .el-main { padding: 12px 20px; }
 }
 </style>

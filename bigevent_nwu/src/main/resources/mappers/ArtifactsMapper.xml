@@ -13,12 +13,14 @@
     <update id="update">
         UPDATE artifacts
         <set>
+            <if test="burialId != null">burial_id = #{burialId},</if>
             <if test="serialNumber != null">serial_number = #{serialNumber},</if>
             <if test="newArtifactCode != null">new_artifact_code = #{newArtifactCode},</if>
             <if test="newArtifactName != null">new_artifact_name = #{newArtifactName},</if>
             <if test="originalArtifactCode != null">original_artifact_code = #{originalArtifactCode},</if>
             <if test="originalArtifactName != null">original_artifact_name = #{originalArtifactName},</if>
             <if test="material1 != null">material1 = #{material1},</if>
+            <if test="material2 != null">material2 = #{material2},</if>
             <if test="completeness != null">completeness = #{completeness},</if>
             <if test="artifactDescription != null">artifact_description = #{artifactDescription},</if>
             <if test="quantity1 != null">quantity1 = #{quantity1},</if>

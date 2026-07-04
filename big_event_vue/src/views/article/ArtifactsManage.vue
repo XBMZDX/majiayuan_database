@@ -7,9 +7,14 @@ import * as XLSX from 'xlsx'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTokenStore } from '@/stores/token.js'
 import request from '@/utils/request.js'
+import StatisticsCards from '@/components/StatisticsCards.vue'
 import { artifactsListService, artifactsAddService, artifactsDeleteService, artifactsUpdateService, artifactsBatchImportService, artifactsBatchDeleteService } from '@/api/Artifacts.js'
 
 const tokenStore = useTokenStore()
+
+// ========== 统计数据卡片 ==========
+const stats = ref({ artifactCount: 0, siteCount: 0, relicCount: 0, detectionCount: 0 })
+const fetchStats = async () => { try { const r = await request.get('/stats'); if (r.data) stats.value = r.data } catch (e) {} }
 
 // ========== 材质级联选择器 ==========
 const materialTree = ref([]) // 材质树数据，供 Cascader 使用
@@ -51,7 +56,7 @@ const fetchCompletenessTree = async () => {
 }
 
 // 初始化加载所有树数据和筛选选项
-onMounted(() => { fetchMaterialTree(); fetchCompletenessTree(); fetchFilterOptions() })
+onMounted(() => { fetchMaterialTree(); fetchCompletenessTree(); fetchFilterOptions(); fetchStats() })
 
 //文物数据模型
 const artifacts = ref([])
@@ -146,6 +151,7 @@ const getDefaultForm = () => ({
     originalArtifactCode: '',
     originalArtifactName: '',
     material1: '',
+    material2: '',
     completeness: '',
     artifactDescription: '',
     quantity1: null,
@@ -184,9 +190,6 @@ const uploadSuccess = (result) => { ArtifactsModel.value.images = result.data; }
 
 //添加文物
 const artifactsAdd = async () => {
-    // 将 Cascader 选择转换为路径字符串存储
-    ArtifactsModel.value.material1 = getMaterialPath(addMaterial1Cascader.value)
-    ArtifactsModel.value.completeness = getMaterialPath(addCompletenessCascader.value)
     let result = await artifactsAddService(ArtifactsModel.value)
     ElMessage.success(result.message || '添加成功')
     resetForm()
@@ -251,8 +254,6 @@ const openEdit = (row) => {
 
 const updateArtifact = async () => {
     // 将 Cascader 选择转换为路径字符串存储
-    editData.value.material1 = getMaterialPath(editMaterial1Cascader.value)
-    editData.value.completeness = getMaterialPath(editCompletenessCascader.value)
     let result = await artifactsUpdateService(editData.value)
     ElMessage.success(result.message || '编辑成功')
     artifactsList()
@@ -285,8 +286,6 @@ const enterDetailEditMode = () => {
 // 保存编辑
 const saveDetailEdit = async () => {
     // 将 Cascader 选择转换为路径字符串
-    detailData.value.material1 = getMaterialPath(detailMaterialCascader.value)
-    detailData.value.completeness = getMaterialPath(detailCompletenessCascader.value)
     // 调用更新接口
     let result = await artifactsUpdateService(detailData.value)
     ElMessage.success(result.message || '保存成功')
@@ -307,6 +306,19 @@ const importResult = ref({})
 const importing = ref(false)
 
 const handleFileChange = (file) => { importFile.value = file.raw; importResult.value = {} }
+
+// 下载导入模板
+const downloadTemplate = () => {
+    const headers = ['序号', '文物新编号', '文物新名称', '文物原始编号', '文物原名称',
+        '材质1', '材质2', '完整度', '文物描述2', '数量1', '数量2',
+        '尺寸', '重量', '出土遗迹', '出土位置', '出土时间',
+        '存放方式', '存放地点', '图片', '文物流转过程', '修复、复原状况',
+        '拍照人', '绘图人', '文字描述人', '备注', '定级情况', '科技检测情况']
+    const ws = XLSX.utils.aoa_to_sheet([headers])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '文物导入模板')
+    XLSX.writeFile(wb, '文物导入模板.xlsx')
+}
 
 const handleImport = async () => {
     if (!importFile.value) { ElMessage.warning('请选择Excel文件'); return }
@@ -332,6 +344,7 @@ const handleImport = async () => {
                     originalArtifactCode: item['文物\\n原始编号\\n'] || item['文物原始编号'] || '',
                     originalArtifactName: item['文物\\n原名称'] || item['文物原名称'] || '',
                     material1: item['材质1'] || '',
+                    material2: item['材质2'] || '',
                     completeness: item['完整度\\n'] || item['完整度'] || '',
                     artifactDescription: item['文物描述2\\n'] || item['文物描述2'] || '',
                     quantity1: item['数量1\\n'] || item['数量1'] || null,
@@ -369,6 +382,14 @@ const handleImport = async () => {
 </script>
 
 <template>
+    <!-- 数据统计卡片 -->
+    <StatisticsCards
+        :artifact-count="stats.artifactCount"
+        :site-count="stats.siteCount"
+        :relic-count="stats.relicCount"
+        :detection-count="stats.detectionCount"
+    />
+
     <el-card class="page-container">
         <template #header>
             <div class="header">
@@ -461,13 +482,14 @@ const handleImport = async () => {
                     <el-form-item label="原始编号"><el-input v-model="ArtifactsModel.originalArtifactCode" placeholder="请输入原始编号" /></el-form-item>
                     <el-form-item label="原名称"><el-input v-model="ArtifactsModel.originalArtifactName" placeholder="请输入原名称" /></el-form-item>
                     <el-form-item label="材质1">
-                        <el-cascader v-model="addMaterial1Cascader" :options="materialTree" :props="{ checkStrictly: false }" placeholder="请选择材质（可多级）" clearable style="width:100%" />
+                        <el-input v-model="ArtifactsModel.material1" placeholder="请输入材质" />
                     </el-form-item>
+                    <el-form-item label="材质2"><el-input v-model="ArtifactsModel.material2" placeholder="请输入材质2" /></el-form-item>
                     <el-form-item label="完整度">
-                        <el-cascader v-model="addCompletenessCascader" :options="completenessTree" :props="{ checkStrictly: false }" placeholder="请选择完整度" clearable style="width:100%" />
+                        <el-input v-model="ArtifactsModel.completeness" placeholder="请输入完整度" />
                     </el-form-item>
-                    <el-form-item label="数量1"><el-input-number v-model="ArtifactsModel.quantity1" :min="0" style="width:100%" /></el-form-item>
-                    <el-form-item label="数量2"><el-input-number v-model="ArtifactsModel.quantity2" :min="0" style="width:100%" /></el-form-item>
+                    <el-form-item label="数量1"><el-input v-model="ArtifactsModel.quantity1" placeholder="请输入数量1" /></el-form-item>
+                    <el-form-item label="数量2"><el-input v-model="ArtifactsModel.quantity2" placeholder="请输入数量2" /></el-form-item>
                     <el-form-item label="尺寸"><el-input v-model="ArtifactsModel.dimensions" placeholder="请输入尺寸" /></el-form-item>
                     <el-form-item label="重量"><el-input v-model="ArtifactsModel.weight" placeholder="请输入重量" /></el-form-item>
                     <el-form-item label="出土遗迹"><el-input v-model="ArtifactsModel.excavationRelic" placeholder="请输入出土遗迹" /></el-form-item>
@@ -514,13 +536,14 @@ const handleImport = async () => {
                     <el-form-item label="原始编号"><el-input v-model="editData.originalArtifactCode" /></el-form-item>
                     <el-form-item label="原名称"><el-input v-model="editData.originalArtifactName" /></el-form-item>
                     <el-form-item label="材质1">
-                        <el-cascader v-model="editMaterial1Cascader" :options="materialTree" :props="{ checkStrictly: false }" placeholder="请选择材质" clearable style="width:100%" />
+                        <el-input v-model="editData.material1" />
                     </el-form-item>
+                    <el-form-item label="材质2"><el-input v-model="editData.material2" /></el-form-item>
                     <el-form-item label="完整度">
-                        <el-cascader v-model="editCompletenessCascader" :options="completenessTree" :props="{ checkStrictly: false }" placeholder="请选择完整度" clearable style="width:100%" />
+                        <el-input v-model="editData.completeness" />
                     </el-form-item>
-                    <el-form-item label="数量1"><el-input-number v-model="editData.quantity1" :min="0" style="width:100%" /></el-form-item>
-                    <el-form-item label="数量2"><el-input-number v-model="editData.quantity2" :min="0" style="width:100%" /></el-form-item>
+                    <el-form-item label="数量1"><el-input v-model="editData.quantity1" /></el-form-item>
+                    <el-form-item label="数量2"><el-input v-model="editData.quantity2" /></el-form-item>
                     <el-form-item label="尺寸"><el-input v-model="editData.dimensions" /></el-form-item>
                     <el-form-item label="重量"><el-input v-model="editData.weight" /></el-form-item>
                     <el-form-item label="出土遗迹"><el-input v-model="editData.excavationRelic" /></el-form-item>
@@ -567,7 +590,8 @@ const handleImport = async () => {
                 <el-descriptions-item label="文物新名称">{{ detailData.newArtifactName || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文物原始编号">{{ detailData.originalArtifactCode || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文物原名称">{{ detailData.originalArtifactName || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="材质">{{ detailData.material1 || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="材质1">{{ detailData.material1 || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="材质2">{{ detailData.material2 || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="完整度">{{ detailData.completeness || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="数量1">{{ detailData.quantity1 ?? '—' }}</el-descriptions-item>
                 <el-descriptions-item label="数量2">{{ detailData.quantity2 ?? '—' }}</el-descriptions-item>
@@ -605,13 +629,14 @@ const handleImport = async () => {
                         <el-form-item label="原始编号"><el-input v-model="detailData.originalArtifactCode" /></el-form-item>
                         <el-form-item label="原名称"><el-input v-model="detailData.originalArtifactName" /></el-form-item>
                         <el-form-item label="材质">
-                            <el-cascader v-model="detailMaterialCascader" :options="materialTree" :props="{ checkStrictly: false }" placeholder="请选择材质" clearable style="width:100%" />
+                            <el-input v-model="detailData.material1" />
                         </el-form-item>
+                        <el-form-item label="材质2"><el-input v-model="detailData.material2" /></el-form-item>
                         <el-form-item label="完整度">
-                            <el-cascader v-model="detailCompletenessCascader" :options="completenessTree" :props="{ checkStrictly: false }" placeholder="请选择完整度" clearable style="width:100%" />
+                            <el-input v-model="detailData.completeness" />
                         </el-form-item>
-                        <el-form-item label="数量1"><el-input-number v-model="detailData.quantity1" :min="0" style="width:100%" /></el-form-item>
-                        <el-form-item label="数量2"><el-input-number v-model="detailData.quantity2" :min="0" style="width:100%" /></el-form-item>
+                        <el-form-item label="数量1"><el-input v-model="detailData.quantity1" /></el-form-item>
+                        <el-form-item label="数量2"><el-input v-model="detailData.quantity2" /></el-form-item>
                         <el-form-item label="尺寸"><el-input v-model="detailData.dimensions" /></el-form-item>
                         <el-form-item label="重量"><el-input v-model="detailData.weight" /></el-form-item>
                         <el-form-item label="出土遗迹"><el-input v-model="detailData.excavationRelic" /></el-form-item>
@@ -652,6 +677,9 @@ const handleImport = async () => {
     <!-- 导入文物抽屉 -->
     <el-drawer v-model="visibleImportDrawer" title="导入文物" direction="rtl" size="50%">
         <el-form label-width="100px">
+            <el-form-item>
+                <el-button type="success" @click="downloadTemplate">获取模板</el-button>
+            </el-form-item>
             <el-form-item label="Excel文件">
                 <el-upload class="upload-demo" action="#" :auto-upload="false" :on-change="handleFileChange"
                     :show-file-list="true" accept=".xlsx,.xls" :limit="1">

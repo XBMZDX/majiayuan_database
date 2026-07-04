@@ -10,12 +10,14 @@ import java.time.LocalDateTime;
 @Data
 public class artifacts {
     private Integer id;
+    private Integer burialId;            // 所属墓葬ID
     private Integer serialNumber;       // 序号
     private String newArtifactCode;     // 文物新编号
     private String newArtifactName;     // 文物新名称
     private String originalArtifactCode;// 文物原始编号
     private String originalArtifactName;// 文物原名称
     private String material1;           // 材质1
+    private String material2;           // 材质2
     private String completeness;        // 完整度
     private String artifactDescription; // 文物描述2
     private Integer quantity1;          // 数量1
