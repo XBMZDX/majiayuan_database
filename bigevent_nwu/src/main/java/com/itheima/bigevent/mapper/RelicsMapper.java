@@ -26,6 +26,6 @@ public interface RelicsMapper {
     void batchInsert(List<relics> relicsList);
 
     // 获取所有遗迹名称（供下拉筛选使用）
-    @Select("SELECT DISTINCT name FROM relics WHERE name IS NOT NULL AND name != '' ORDER BY name")
+    @Select("SELECT DISTINCT excavation_relic AS name FROM artifacts WHERE excavation_relic IS NOT NULL AND excavation_relic != '' ORDER BY excavation_relic")
     List<String> getNames();
 }
