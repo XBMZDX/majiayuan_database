@@ -8,7 +8,7 @@ import java.util.List;
 public interface BurialMapper {
 
     // 简易列表（下拉用）
-    @Select("SELECT id, burial_no, name, has_coffin, coffin_count FROM burial ORDER BY id DESC")
+    @Select("SELECT id, burial_no, name, has_coffin, coffin_count, has_chariot, chariot_count FROM burial ORDER BY id DESC")
     List<Burial> listSimple();
 
     // 根据ID查询

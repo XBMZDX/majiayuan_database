@@ -8,7 +8,9 @@ import * as XLSX from 'xlsx'
 // 墓葬列表（只显示有棺的）+ 选中
 const allBurials = ref([])         // 全部墓葬
 const burialList = computed(() => allBurials.value.filter(b => b.hasCoffin && b.coffinCount > 0)) // 只保留有棺的
+const CACHE_KEY = 'coffin_artifacts_burial'
 const selectedBurialId = ref(null)
+try { const v = sessionStorage.getItem(CACHE_KEY); if (v) selectedBurialId.value = parseInt(v) } catch(e) {}
 const selectedBurial = computed(() => allBurials.value.find(b => b.id === selectedBurialId.value))
 const coffinCount = computed(() => selectedBurial.value?.coffinCount || 0)
 // 棺选择：1=棺1, 2=棺2...
@@ -24,15 +26,13 @@ const artifacts = ref([])
 const fetchBurialList = async () => {
     const res = await request.get('/admin/burial/list/simple')
     allBurials.value = res.data || []
-    if (burialList.value.length > 0 && !selectedBurialId.value) {
-        selectedBurialId.value = burialList.value[0].id
-        selectedCoffinIndex.value = 1
-        await loadArtifacts()
-    }
+    if (selectedBurialId.value && !burialList.value.find(b => b.id === selectedBurialId.value)) selectedBurialId.value = null
+    if (!selectedBurialId.value && burialList.value.length > 0) selectedBurialId.value = burialList.value[0].id
+    if (selectedBurialId.value) { selectedCoffinIndex.value = 1; await loadArtifacts() }
 }
 
 // 切换墓葬
-const onBurialChange = () => { selectedCoffinIndex.value = 1; loadArtifacts() }
+const onBurialChange = () => { sessionStorage.setItem(CACHE_KEY, selectedBurialId.value); selectedCoffinIndex.value = 1; loadArtifacts() }
 // 切换棺
 const onCoffinChange = () => { loadArtifacts() }
 

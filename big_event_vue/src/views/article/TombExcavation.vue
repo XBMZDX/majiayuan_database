@@ -7,7 +7,9 @@ import * as XLSX from 'xlsx'
 
 // 墓葬列表 + 选中
 const burialList = ref([])
+const CACHE_KEY = 'tomb_excavation_burial'
 const selectedBurialId = ref(null)
+try { const v = sessionStorage.getItem(CACHE_KEY); if (v) selectedBurialId.value = parseInt(v) } catch(e) {}
 
 // 统计数据
 const stats = ref({ total: 0, materials: [], completeness: [] })
@@ -18,11 +20,11 @@ const artifacts = ref([])
 const fetchBurialList = async () => {
     const res = await request.get('/admin/burial/list/simple')
     burialList.value = res.data || []
-    if (burialList.value.length > 0 && !selectedBurialId.value) {
-        selectedBurialId.value = burialList.value[0].id
-        await loadBurialData()
-    }
+    if (selectedBurialId.value && !burialList.value.find(b => b.id === selectedBurialId.value)) selectedBurialId.value = null
+    if (!selectedBurialId.value && burialList.value.length > 0) selectedBurialId.value = burialList.value[0].id
+    if (selectedBurialId.value) await loadBurialData()
 }
+const onBurialChange = () => { sessionStorage.setItem(CACHE_KEY, selectedBurialId.value); loadBurialData() }
 
 // 从文物列表计算统计数据
 const calcStats = (list) => {
@@ -156,7 +158,7 @@ onMounted(() => { fetchBurialList() })
     <div class="excavation-page">
         <!-- 顶部墓葬切换器 + 操作按钮 -->
         <div class="toolbar">
-            <el-select v-model="selectedBurialId" placeholder="请选择墓葬" @change="loadBurialData" style="width:340px" size="large">
+            <el-select v-model="selectedBurialId" placeholder="请选择墓葬" @change="onBurialChange" style="width:340px" size="large">
                 <el-option v-for="b in burialList" :key="b.id" :label="b.name && b.name !== b.burialNo ? b.burialNo + ' ' + b.name : b.burialNo" :value="b.id" />
             </el-select>
             <div class="toolbar-actions">

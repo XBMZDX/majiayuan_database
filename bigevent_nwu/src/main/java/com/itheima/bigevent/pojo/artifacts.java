@@ -13,6 +13,7 @@ public class artifacts {
     private Integer burialId;            // 所属墓葬ID
     private Integer coffinIndex;         // 所属棺序号（1=棺1, 2=棺2...）
     private Integer coffinId;            // 所属棺ID（预留）
+    private Integer chariotIndex;        // 所属车序号（1=车1, 2=车2...）
     private Integer chariotId;           // 所属车ID（预留）
     private Integer serialNumber;       // 序号
     private String newArtifactCode;     // 文物新编号
