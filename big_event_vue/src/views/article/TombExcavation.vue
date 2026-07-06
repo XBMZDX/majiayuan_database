@@ -24,15 +24,28 @@ const fetchBurialList = async () => {
     }
 }
 
+// 从文物列表计算统计数据
+const calcStats = (list) => {
+    const total = list.length
+    const matMap = {}; const compMap = {}
+    list.forEach(a => {
+        const m = a.material1 || '未知'; matMap[m] = (matMap[m] || 0) + 1
+        const c = a.completeness || '未知'; compMap[c] = (compMap[c] || 0) + 1
+    })
+    return {
+        total,
+        materials: Object.entries(matMap).map(([name, count]) => ({ name, count })),
+        completeness: Object.entries(compMap).map(([name, count]) => ({ name, count }))
+    }
+}
+
 // 切换墓葬 → 刷新统计 + 文物表
 const loadBurialData = async () => {
     if (!selectedBurialId.value) return
-    const [statsRes, artRes] = await Promise.all([
-        request.get(`/admin/burial/${selectedBurialId.value}/artifact-stats`),
-        request.get(`/admin/burial/${selectedBurialId.value}/artifacts`)
-    ])
-    stats.value = statsRes.data || { total: 0, materials: [], completeness: [] }
-    artifacts.value = artRes.data || []
+    const artRes = await request.get(`/admin/burial/${selectedBurialId.value}/artifacts`)
+    // 墓葬出土只显示非棺文物（coffin_index 为空或0）
+    artifacts.value = (artRes.data || []).filter(a => !a.coffinIndex || a.coffinIndex === 0)
+    stats.value = calcStats(artifacts.value)
     pageNum.value = 1
 }
 

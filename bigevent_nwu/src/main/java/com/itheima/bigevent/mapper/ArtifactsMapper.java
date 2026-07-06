@@ -8,7 +8,7 @@ import java.util.List;
 @Mapper
 public interface ArtifactsMapper {
     // 添加文物
-    @Insert("INSERT INTO artifacts (burial_id, serial_number, new_artifact_code, new_artifact_name, original_artifact_code, original_artifact_name, material1, material2, completeness, artifact_description, quantity1, quantity2, dimensions, weight, excavation_relic, excavation_position, excavation_time, storage_method, images, transfer_process, restoration_status, photographer, draftsperson, text_describer, notes, grading_status, testing_status, created_by, create_time, update_time) VALUES (#{burialId}, #{serialNumber}, #{newArtifactCode}, #{newArtifactName}, #{originalArtifactCode}, #{originalArtifactName}, #{material1}, #{material2}, #{completeness}, #{artifactDescription}, #{quantity1}, #{quantity2}, #{dimensions}, #{weight}, #{excavationRelic}, #{excavationPosition}, #{excavationTime}, #{storageMethod}, #{images}, #{transferProcess}, #{restorationStatus}, #{photographer}, #{draftsperson}, #{textDescriber}, #{notes}, #{gradingStatus}, #{testingStatus}, #{createdBy}, #{createTime}, #{updateTime})")
+    @Insert("INSERT INTO artifacts (burial_id, coffin_index, coffin_id, chariot_id, serial_number, new_artifact_code, new_artifact_name, original_artifact_code, original_artifact_name, material1, material2, completeness, artifact_description, quantity1, quantity2, dimensions, weight, excavation_relic, excavation_position, excavation_time, storage_method, images, transfer_process, restoration_status, photographer, draftsperson, text_describer, notes, grading_status, testing_status, created_by, create_time, update_time) VALUES (#{burialId}, #{coffinIndex}, #{coffinId}, #{chariotId}, #{serialNumber}, #{newArtifactCode}, #{newArtifactName}, #{originalArtifactCode}, #{originalArtifactName}, #{material1}, #{material2}, #{completeness}, #{artifactDescription}, #{quantity1}, #{quantity2}, #{dimensions}, #{weight}, #{excavationRelic}, #{excavationPosition}, #{excavationTime}, #{storageMethod}, #{images}, #{transferProcess}, #{restorationStatus}, #{photographer}, #{draftsperson}, #{textDescriber}, #{notes}, #{gradingStatus}, #{testingStatus}, #{createdBy}, #{createTime}, #{updateTime})")
     void add(artifacts artifact);
 
     // 根据ID删除文物
@@ -51,6 +51,19 @@ public interface ArtifactsMapper {
     // 按墓葬查询文物列表
     @Select("SELECT * FROM artifacts WHERE burial_id = #{burialId} ORDER BY CAST(serial_number AS UNSIGNED) ASC")
     List<artifacts> listByBurial(Integer burialId);
+
+    // 按棺查询
+    @Select("SELECT * FROM artifacts WHERE coffin_id = #{coffinId} ORDER BY CAST(serial_number AS UNSIGNED) ASC")
+    List<artifacts> listByCoffin(Integer coffinId);
+
+    @Select("SELECT COUNT(*) FROM artifacts WHERE coffin_id = #{coffinId}")
+    Integer countByCoffin(Integer coffinId);
+
+    @Select("SELECT COALESCE(NULLIF(material1,''),'未知') AS name, COUNT(*) AS count FROM artifacts WHERE coffin_id = #{coffinId} GROUP BY material1")
+    List<java.util.Map<String,Object>> coffinMaterialDistribution(Integer coffinId);
+
+    @Select("SELECT COALESCE(NULLIF(completeness,''),'未知') AS name, COUNT(*) AS count FROM artifacts WHERE coffin_id = #{coffinId} GROUP BY completeness")
+    List<java.util.Map<String,Object>> coffinCompletenessDistribution(Integer coffinId);
 
     // 墓葬文物总数
     @Select("SELECT COUNT(*) FROM artifacts WHERE burial_id = #{burialId}")
