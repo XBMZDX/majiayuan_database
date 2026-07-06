@@ -83,7 +83,7 @@ const handleImport = async () => {
         const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'})
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
         await artifactsBatchImportService(data.map(item => ({
-            burialId: selectedBurialId.value, coffinIndex: selectedCoffinIndex.value, serialNumber: item['序号'],
+            burialId: selectedBurialId.value, coffinIndex: selectedCoffinIndex.value, // serialNumber 由后端自动分配
             newArtifactCode: item['文物新编号']||'', newArtifactName: item['文物新名称']||'',
             originalArtifactCode: item['文物原始编号']||'', originalArtifactName: item['文物原名称']||'',
             material1: item['材质1']||'', material2: item['材质2']||'',

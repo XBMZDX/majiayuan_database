@@ -41,7 +41,7 @@ public class StatsController {
         @Select("SELECT COUNT(*) FROM heritage_sites")
         Long countSites();
 
-        @Select("SELECT COUNT(*) FROM relics")
+        @Select("SELECT COUNT(DISTINCT excavation_relic) FROM artifacts WHERE excavation_relic IS NOT NULL AND excavation_relic != ''")
         Long countRelics();
     }
 }

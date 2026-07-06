@@ -337,7 +337,7 @@ const handleImport = async () => {
                     return
                 }
                 const importData = jsonData.map(item => ({
-                    serialNumber: item['序号'] || null,
+                    // serialNumber 由后端自动分配，不从 Excel 读取
                     newArtifactCode: item['文物\\n新编号\\n'] || item['文物新编号'] || '',
                     newArtifactName: item['文物\\n新名称'] || item['文物新名称'] || '',
                     originalArtifactCode: item['文物\\n原始编号\\n'] || item['文物原始编号'] || '',
