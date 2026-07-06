@@ -383,7 +383,6 @@ const handleImport = async () => {
     <!-- 数据统计卡片 -->
     <StatisticsCards
         :artifact-count="stats.artifactCount"
-        :site-count="stats.siteCount"
         :relic-count="stats.relicCount"
         :detection-count="stats.detectionCount"
     />

@@ -3,18 +3,16 @@
  * 数据统计卡片组件 — 4 个横向并排指标看板
  * 数据通过 props 传入，便于后续对接接口
  */
-import { Document, Location, Flag, Monitor } from '@element-plus/icons-vue'
+import { Document, Flag, Monitor } from '@element-plus/icons-vue'
 
 defineProps({
     artifactCount: { type: Number, default: 0 }, // 文物总数
-    siteCount:     { type: Number, default: 0 }, // 遗址总数
     relicCount:    { type: Number, default: 0 }, // 遗迹总数
     detectionCount:{ type: Number, default: 0 }, // 检测项目总数
 })
 
 const cards = [
     { label: '文物总数', icon: Document, key: 'artifactCount' },
-    { label: '遗址总数', icon: Location, key: 'siteCount' },
     { label: '遗迹总数', icon: Flag,     key: 'relicCount' },
     { label: '检测项目总数', icon: Monitor, key: 'detectionCount' },
 ]
