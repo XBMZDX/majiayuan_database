@@ -74,7 +74,7 @@ const confirmBatchDelete = () => {
 }
 
 // 导入
-const importVisible = ref(false); const importFile = ref(null)
+const importVisible = ref(false); const uploadRef = ref(null); const importFile = ref(null)
 const handleImportFile = (file) => { importFile.value = file.raw }
 const handleImport = async () => {
     if (!importFile.value) { ElMessage.warning('请选择文件'); return }
@@ -94,7 +94,7 @@ const handleImport = async () => {
             photographer: item['拍照人']||'', draftsperson: item['绘图人']||'', textDescriber: item['文字描述人']||'',
             notes: item['备注']||'', gradingStatus: item['定级情况']||'', testingStatus: item['科技检测情况']||''
         })))
-        ElMessage.success('导入成功'); importVisible.value = false; loadArtifacts()
+        ElMessage.success('导入成功'); importFile.value = null; uploadRef.value?.clearFiles(); importVisible.value = false; loadArtifacts()
     }
     reader.readAsArrayBuffer(importFile.value)
 }
@@ -220,7 +220,7 @@ onMounted(() => { fetchBurialList() })
         <template #footer><el-button @click="addVisible = false">取消</el-button><el-button type="primary" @click="submitAdd">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="importVisible" title="导入文物" width="500px"><el-form label-width="100px"><el-form-item><el-button type="success" @click="downloadTemplate">获取模板</el-button></el-form-item><el-form-item label="Excel文件"><el-upload :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1"><el-button type="primary">选择文件</el-button></el-upload></el-form-item></el-form><template #footer><el-button @click="importVisible = false">取消</el-button><el-button type="primary" @click="handleImport">开始导入</el-button></template></el-dialog>
+    <el-dialog v-model="importVisible" title="导入文物" width="500px"><el-form label-width="100px"><el-form-item><el-button type="success" @click="downloadTemplate">获取模板</el-button></el-form-item><el-form-item label="Excel文件"><el-upload ref="uploadRef" :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1"><el-button type="primary">选择文件</el-button></el-upload></el-form-item></el-form><template #footer><el-button @click="importVisible = false">取消</el-button><el-button type="primary" @click="handleImport">开始导入</el-button></template></el-dialog>
 </template>
 
 <style scoped>

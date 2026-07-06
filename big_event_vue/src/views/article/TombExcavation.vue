@@ -89,7 +89,7 @@ const confirmBatchDelete = () => {
 
 // 导入
 const importVisible = ref(false)
-const importFile = ref(null)
+const uploadRef = ref(null); const importFile = ref(null)
 const handleImportFile = (file) => { importFile.value = file.raw }
 const handleImport = async () => {
     if (!importFile.value) { ElMessage.warning('请选择文件'); return }
@@ -113,7 +113,7 @@ const handleImport = async () => {
             gradingStatus: item['定级情况'] || '', testingStatus: item['科技检测情况'] || ''
         }))
         await artifactsBatchImportService(importData)
-        ElMessage.success('导入成功')
+        ElMessage.success('导入成功'); importFile.value = null; uploadRef.value?.clearFiles()
         importVisible.value = false
         loadBurialData()
     }
@@ -303,7 +303,7 @@ onMounted(() => { fetchBurialList() })
                 <el-button type="success" @click="downloadTemplate">获取模板</el-button>
             </el-form-item>
             <el-form-item label="Excel文件">
-                <el-upload :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1">
+                <el-upload ref="uploadRef" :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1">
                     <el-button type="primary">选择文件</el-button>
                     <template #tip>请上传Excel文件（.xlsx或.xls格式）</template>
                 </el-upload>

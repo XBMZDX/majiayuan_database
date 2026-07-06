@@ -235,6 +235,7 @@ const confirmBatchDelete = () => {
         ElMessage({ type: 'success', message: `成功删除 ${count} 件文物` })
         cancelBatchMode()
         artifactsList()
+        fetchStats()
     }).catch(() => { ElMessage({ type: 'info', message: '已取消' }) })
 }
 
@@ -300,6 +301,7 @@ const cancelDetailEdit = () => {
 
 //导入
 const visibleImportDrawer = ref(false)
+const uploadRef = ref(null)
 const importFile = ref(null)
 const importResult = ref({})
 const importing = ref(false)
@@ -370,6 +372,7 @@ const handleImport = async () => {
                 importing.value = false
                 importResult.value = { success: true, message: `导入成功，共${validData.length}条` }
                 ElMessage.success(result.message || '导入成功')
+                importFile.value = null; uploadRef.value?.clearFiles()
                 artifactsList()
             } catch (error) { importing.value = false; ElMessage.error('Excel解析失败') }
         }
@@ -673,7 +676,7 @@ const handleImport = async () => {
                 <el-button type="success" @click="downloadTemplate">获取模板</el-button>
             </el-form-item>
             <el-form-item label="Excel文件">
-                <el-upload class="upload-demo" action="#" :auto-upload="false" :on-change="handleFileChange"
+                <el-upload ref="uploadRef" class="upload-demo" action="#" :auto-upload="false" :on-change="handleFileChange"
                     :show-file-list="true" accept=".xlsx,.xls" :limit="1">
                     <el-button type="primary">选择文件</el-button>
                     <template #tip><div class="el-upload__tip">请上传Excel文件（.xlsx或.xls格式），表头需匹配模板</div></template>
