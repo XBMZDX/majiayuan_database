@@ -54,6 +54,36 @@ const confirmBatchDelete = () => {
         .then(async () => { await request.post('/admin/detection/batch-delete', selectedRows.value.map(r=>r.id)); ElMessage.success('删除成功'); cancelBatchMode(); fetchList() }).catch(()=>{})
 }
 
+// 批量导入
+import * as XLSX from 'xlsx'
+const importVisible = ref(false); const uploadRef = ref(null); const importFile = ref(null)
+const handleImportFile = (file) => { importFile.value = file.raw }
+const handleImport = async () => {
+    if (!importFile.value) { ElMessage.warning('请选择文件'); return }
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'})
+        const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+        const importData = data.map(item => ({
+            artifactCode: item['文物编号']||'', artifactName: item['文物名称']||'',
+            excavationRelic: item['出土遗迹']||'', samplePosition: item['取样部位']||'',
+            sampleMaterial: item['样品材质']||'', sampleStatus: item['样品状态']||'',
+            sampleQuantity: item['样品数量']||'', sampleMethod: item['取样方法']||'',
+            purpose: item['目的']||'', storageLocation: item['存放位置']||'',
+            departureTime: item['出库时间']||'', destination: item['去处']||'',
+            samplePhoto: item['取样照片']||'', analysisData: item['分析数据']||'',
+            analysisReport: item['分析报告']||'', manager: item['文物管理人']||'',
+            sampler: item['取样人']||'', notes: item['备注']||''
+        }))
+        for (const d of importData) await request.post('/admin/detection', d)
+        ElMessage.success('导入成功'); importFile.value = null; uploadRef.value?.clearFiles(); importVisible.value = false; fetchList()
+    }; reader.readAsArrayBuffer(importFile.value)
+}
+const downloadTemplate = () => {
+    const h = ['序号','文物编号','文物名称','出土遗迹','取样部位','样品材质','样品状态','样品数量','取样方法','目的','存放位置','出库时间','去处','取样照片','分析数据','分析报告','文物管理人','取样人','备注']
+    const ws = XLSX.utils.aoa_to_sheet([h]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'模板'); XLSX.writeFile(wb,'检测导入模板.xlsx')
+}
+
 const addVisible = ref(false)
 const addForm = ref({ artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' })
 const submitAdd = async () => { await request.post('/admin/detection', addForm.value); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
@@ -79,14 +109,16 @@ onMounted(() => { fetchList() })
             </el-card>
         </div>
 
-        <div class="filter-bar">
-            <el-input v-model="searchParams.artifactCode" placeholder="文物编号" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-            <el-input v-model="searchParams.artifactName" placeholder="文物名称" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-            <el-input v-model="searchParams.excavationRelic" placeholder="出土遗迹" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-            <el-input v-model="searchParams.sampleMaterial" placeholder="样品材质" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-            <el-button type="primary" @click="handleSearch">搜索</el-button>
-            <el-button @click="handleReset">重置</el-button>
-        </div>
+        <el-card shadow="never" class="filter-card">
+            <div class="filter-bar">
+                <el-input v-model="searchParams.artifactCode" placeholder="文物编号" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
+                <el-input v-model="searchParams.artifactName" placeholder="文物名称" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
+                <el-input v-model="searchParams.excavationRelic" placeholder="出土遗迹" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
+                <el-input v-model="searchParams.sampleMaterial" placeholder="样品材质" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
+                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-button @click="handleReset">重置</el-button>
+            </div>
+        </el-card>
 
         <el-card shadow="never" class="table-card">
             <template #header>
@@ -94,6 +126,7 @@ onMounted(() => { fetchList() })
                     <span style="font-weight:600">检测分析总览</span>
                     <div>
                         <el-button type="primary" @click="addVisible = true">添加检测</el-button>
+                        <el-button type="success" @click="importVisible = true">导入</el-button>
                         <el-button type="danger" @click="enterBatchMode" :disabled="batchMode">批量删除</el-button>
                     </div>
                 </div>
@@ -194,6 +227,15 @@ onMounted(() => { fetchList() })
         </el-row></el-form>
         <template #footer><el-button @click="editVisible = false">取消</el-button><el-button type="primary" @click="submitEdit">保存</el-button></template>
     </el-dialog>
+
+    <!-- 导入对话框 -->
+    <el-dialog v-model="importVisible" title="导入检测数据" width="500px">
+        <el-form label-width="100px">
+            <el-form-item><el-button type="success" @click="downloadTemplate">获取模板</el-button></el-form-item>
+            <el-form-item label="Excel文件"><el-upload ref="uploadRef" :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
+        </el-form>
+        <template #footer><el-button @click="importVisible = false">取消</el-button><el-button type="primary" @click="handleImport">开始导入</el-button></template>
+    </el-dialog>
 </template>
 
 <style scoped>
@@ -204,7 +246,8 @@ onMounted(() => { fetchList() })
 .empty-hint { font-size: 13px; color: #C0C4CC; }
 .stat-value { font-size: 28px; font-weight: 700; color: #1D2129; }
 .stat-label { font-size: 12px; color: #8C8C8C; margin-top: 4px; }
-.filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-card { margin-bottom: 12px; border: 1px solid #E5E6EB; border-radius: 8px; }
+.filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .table-card { border: 1px solid #E5E6EB; border-radius: 8px; }
 .header { display: flex; justify-content: space-between; align-items: center; }
 .batch-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; margin-bottom: 10px; background: #fef0f0; border: 1px solid #fde2e2; border-radius: 4px; }
