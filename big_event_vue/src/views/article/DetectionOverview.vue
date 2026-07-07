@@ -71,8 +71,7 @@ const handleImport = async () => {
             sampleQuantity: item['样品数量']||'', sampleMethod: item['取样方法']||'',
             purpose: item['目的']||'', storageLocation: item['存放位置']||'',
             departureTime: item['出库时间']||'', destination: item['去处']||'',
-            samplePhoto: item['取样照片']||'', analysisData: item['分析数据']||'',
-            analysisReport: item['分析报告']||'', manager: item['文物管理人']||'',
+            samplePhoto: item['取样照片']||'', analysisData: item['目的']||'', analysisReport: item['目的']||'', manager: item['文物管理人']||'',
             sampler: item['取样人']||'', notes: item['备注']||''
         }))
         for (const d of importData) await request.post('/admin/detection', d)
@@ -80,13 +79,13 @@ const handleImport = async () => {
     }; reader.readAsArrayBuffer(importFile.value)
 }
 const downloadTemplate = () => {
-    const h = ['序号','文物编号','文物名称','出土遗迹','取样部位','样品材质','样品状态','样品数量','取样方法','目的','存放位置','出库时间','去处','取样照片','分析数据','分析报告','文物管理人','取样人','备注']
+    const h = ['序号','文物编号','文物名称','出土遗迹','取样部位','样品材质','样品状态','样品数量','取样方法','目的','存放位置','出库时间','去处','取样照片','文物管理人','取样人','备注']
     const ws = XLSX.utils.aoa_to_sheet([h]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'模板'); XLSX.writeFile(wb,'检测导入模板.xlsx')
 }
 
 const addVisible = ref(false)
 const addForm = ref({ artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' })
-const submitAdd = async () => { await request.post('/admin/detection', addForm.value); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
 const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true }
@@ -145,8 +144,6 @@ onMounted(() => { fetchList() })
                 <el-table-column label="取样方法" prop="sampleMethod" width="120" />
                 <el-table-column label="目的" prop="purpose" width="100" />
                 <el-table-column label="取样照片" prop="samplePhoto" width="100" />
-                <el-table-column label="分析数据" prop="analysisData" width="100" />
-                <el-table-column label="分析报告" prop="analysisReport" width="100" />
                 <el-table-column label="操作" width="150" fixed="right">
                     <template #default="{row}"><el-link type="primary" @click="openDetail(row)">详情</el-link>&nbsp;<el-link type="primary" @click="openEdit(row)">编辑</el-link>&nbsp;<el-link type="danger" @click="del(row)">删除</el-link></template>
                 </el-table-column>
@@ -195,8 +192,6 @@ onMounted(() => { fetchList() })
             <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="addForm.departureTime" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="addForm.destination" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="addForm.samplePhoto" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="分析数据"><el-input v-model="addForm.analysisData" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="分析报告"><el-input v-model="addForm.analysisReport" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="管理人"><el-input v-model="addForm.manager" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样人"><el-input v-model="addForm.sampler" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="addForm.notes" type="textarea" :rows="2" /></el-form-item></el-col>
@@ -219,8 +214,6 @@ onMounted(() => { fetchList() })
             <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="editData.departureTime" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="editData.destination" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="editData.samplePhoto" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="分析数据"><el-input v-model="editData.analysisData" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="分析报告"><el-input v-model="editData.analysisReport" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="管理人"><el-input v-model="editData.manager" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样人"><el-input v-model="editData.sampler" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="editData.notes" type="textarea" :rows="2" /></el-form-item></el-col>
