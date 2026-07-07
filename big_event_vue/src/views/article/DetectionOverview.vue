@@ -41,7 +41,11 @@ const handleSearch = () => { pageNum.value = 1 }
 const handleReset = () => { searchParams.value = { artifactCode: '', artifactName: '', excavationRelic: '', sampleMaterial: '' }; pageNum.value = 1 }
 
 const detailVisible = ref(false); const detailData = ref({})
-const openDetail = (row) => { detailData.value = { ...row }; detailVisible.value = true }
+const detailEditMode = ref(false); const detailBackup = ref({})
+const openDetail = (row) => { detailData.value = { ...row }; detailEditMode.value = false; detailVisible.value = true }
+const enterDetailEditMode = () => { detailBackup.value = { ...detailData.value }; detailEditMode.value = true }
+const cancelDetailEdit = () => { detailData.value = { ...detailBackup.value }; detailEditMode.value = false }
+const saveDetailEdit = async () => { await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
 
 const del = (row) => { ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }).then(async () => { await request.delete('/admin/detection/' + row.id); ElMessage.success('删除成功'); fetchList() }).catch(() => {}) }
 
@@ -57,6 +61,13 @@ const confirmBatchDelete = () => {
 // 批量导入
 import * as XLSX from 'xlsx'
 const importVisible = ref(false); const uploadRef = ref(null); const importFile = ref(null)
+// Excel日期序列号 → yyyy/MM/dd 字符串
+const excelDateToStr = (val) => {
+    if (!val) return ''
+    if (typeof val === 'number') { const d = new Date((val - 25569) * 86400 * 1000); return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') }
+    return String(val)
+}
+
 const handleImportFile = (file) => { importFile.value = file.raw }
 const handleImport = async () => {
     if (!importFile.value) { ElMessage.warning('请选择文件'); return }
@@ -64,13 +75,16 @@ const handleImport = async () => {
     reader.onload = async (e) => {
         const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'})
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+        // 序号自动追加到现有数据之后
+        let nextSn = list.value.length + 1
         const importData = data.map(item => ({
+            serialNumber: String(nextSn++),
             artifactCode: item['文物编号']||'', artifactName: item['文物名称']||'',
             excavationRelic: item['出土遗迹']||'', samplePosition: item['取样部位']||'',
             sampleMaterial: item['样品材质']||'', sampleStatus: item['样品状态']||'',
             sampleQuantity: item['样品数量']||'', sampleMethod: item['取样方法']||'',
             purpose: item['目的']||'', storageLocation: item['存放位置']||'',
-            departureTime: item['出库时间']||'', destination: item['去处']||'',
+            departureTime: excelDateToStr(item['出库时间']), destination: item['去处']||'',
             samplePhoto: item['取样照片']||'', analysisData: item['目的']||'', analysisReport: item['目的']||'', manager: item['文物管理人']||'',
             sampler: item['取样人']||'', notes: item['备注']||''
         }))
@@ -85,7 +99,7 @@ const downloadTemplate = () => {
 
 const addVisible = ref(false)
 const addForm = ref({ artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' })
-const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
 const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true }
@@ -144,8 +158,8 @@ onMounted(() => { fetchList() })
                 <el-table-column label="取样方法" prop="sampleMethod" width="120" />
                 <el-table-column label="目的" prop="purpose" width="100" />
                 <el-table-column label="取样照片" prop="samplePhoto" width="100" />
-                <el-table-column label="操作" width="150" fixed="right">
-                    <template #default="{row}"><el-link type="primary" @click="openDetail(row)">详情</el-link>&nbsp;<el-link type="primary" @click="openEdit(row)">编辑</el-link>&nbsp;<el-link type="danger" @click="del(row)">删除</el-link></template>
+                <el-table-column label="操作" width="80" fixed="right">
+                    <template #default="{row}"><el-link type="primary" @click="openDetail(row)">详情</el-link></template>
                 </el-table-column>
                 <template #empty><el-empty description="暂无数据" /></template>
             </el-table>
@@ -153,28 +167,53 @@ onMounted(() => { fetchList() })
         </el-card>
     </div>
 
-    <el-dialog v-model="detailVisible" title="检测详情" width="700px">
-        <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="序号">{{ detailData.serialNumber || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物编号">{{ detailData.artifactCode || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物名称">{{ detailData.artifactName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="出土遗迹">{{ detailData.excavationRelic || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="取样部位">{{ detailData.samplePosition || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="样品材质">{{ detailData.sampleMaterial || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="样品状态">{{ detailData.sampleStatus || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="样品数量">{{ detailData.sampleQuantity || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="取样方法">{{ detailData.sampleMethod || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="目的">{{ detailData.purpose || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="存放位置">{{ detailData.storageLocation || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="出库时间">{{ detailData.departureTime || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="去处">{{ detailData.destination || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="取样照片">{{ detailData.samplePhoto || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="分析数据" :span="2">{{ detailData.analysisData || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="分析报告" :span="2">{{ detailData.analysisReport || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物管理人">{{ detailData.manager || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="取样人">{{ detailData.sampler || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '-' }}</el-descriptions-item>
-        </el-descriptions>
+    <!-- 详情对话框（双模式） -->
+    <el-dialog v-model="detailVisible" :title="detailEditMode ? '编辑检测' : '检测详情'" width="700px">
+        <template v-if="!detailEditMode">
+            <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="序号">{{ detailData.serialNumber || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="文物编号">{{ detailData.artifactCode || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="文物名称">{{ detailData.artifactName || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="出土遗迹">{{ detailData.excavationRelic || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="取样部位">{{ detailData.samplePosition || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="样品材质">{{ detailData.sampleMaterial || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="样品状态">{{ detailData.sampleStatus || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="样品数量">{{ detailData.sampleQuantity || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="取样方法">{{ detailData.sampleMethod || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="目的">{{ detailData.purpose || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="存放位置">{{ detailData.storageLocation || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="出库时间">{{ detailData.departureTime || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="去处">{{ detailData.destination || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="取样照片">{{ detailData.samplePhoto || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="分析数据" :span="2">{{ detailData.analysisData || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="分析报告" :span="2">{{ detailData.analysisReport || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="文物管理人">{{ detailData.manager || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="取样人">{{ detailData.sampler || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '-' }}</el-descriptions-item>
+            </el-descriptions>
+            <div style="margin-top:20px;text-align:right"><el-button type="primary" @click="enterDetailEditMode">编辑</el-button></div>
+        </template>
+        <template v-else>
+            <el-form :model="detailData" label-width="100px"><el-row :gutter="16">
+                <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="detailData.artifactCode" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="detailData.artifactName" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="出土遗迹"><el-input v-model="detailData.excavationRelic" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="detailData.samplePosition" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="detailData.sampleMaterial" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="样品状态"><el-input v-model="detailData.sampleStatus" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="样品数量"><el-input v-model="detailData.sampleQuantity" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="取样方法"><el-input v-model="detailData.sampleMethod" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="目的"><el-input v-model="detailData.purpose" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="detailData.storageLocation" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="detailData.departureTime" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="去处"><el-input v-model="detailData.destination" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="detailData.samplePhoto" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="管理人"><el-input v-model="detailData.manager" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="取样人"><el-input v-model="detailData.sampler" /></el-form-item></el-col>
+                <el-col :span="24"><el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item></el-col>
+            </el-row></el-form>
+            <div style="margin-top:20px;text-align:right"><el-button @click="cancelDetailEdit">取消</el-button><el-button type="primary" @click="saveDetailEdit">保存</el-button></div>
+        </template>
     </el-dialog>
 
     <el-dialog v-model="addVisible" title="添加检测" width="700px" :close-on-click-modal="false" destroy-on-close>
