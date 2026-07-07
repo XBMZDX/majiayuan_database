@@ -15,6 +15,10 @@ import Conservation from '@/views/article/Conservation.vue'
 import Restoration from '@/views/article/Restoration.vue'
 import DigitalLibrary from '@/views/article/DigitalLibrary.vue'
 import AiChat from '@/views/article/AiChat.vue'
+import DetectionOverview from '@/views/article/DetectionOverview.vue'
+import DetectionResult from '@/views/article/DetectionResult.vue'
+import DetectionReport from '@/views/article/DetectionReport.vue'
+import DetectionImage from '@/views/article/DetectionImage.vue'
 import UserAvatarVue from '@/views/user/UserAvatar.vue'
 import UserInfoVue from '@/views/user/UserInfo.vue'
 import UserResetPasswordVue from '@/views/user/UserResetPassword.vue'
@@ -35,6 +39,10 @@ const routes = [
         {path:'/tomb/chariot/basic',component:ChariotBasic},
         {path:'/tomb/chariot/artifacts',component:ChariotArtifacts},
         {path:'/detection/manage',component:DetectionAnalysis},
+        {path:'/detection/overview',component:DetectionOverview},
+        {path:'/detection/result',component:DetectionResult},
+        {path:'/detection/report',component:DetectionReport},
+        {path:'/detection/image',component:DetectionImage},
         {path:'/conservation/manage',component:Conservation},
         {path:'/restoration/manage',component:Restoration},
         {path:'/library/manage',component:DigitalLibrary},
