@@ -10,7 +10,9 @@ const calcStats = (data) => {
     const relicMap = {}; const purposeMap = {}
     data.forEach(d => {
         const r = d.excavationRelic || '未知'; relicMap[r] = (relicMap[r] || 0) + 1
-        const p = d.purpose || '未知'; purposeMap[p] = (purposeMap[p] || 0) + 1
+        // 统计时拆分 / 分隔的实验项目
+        const parts = (d.purpose || '未知').split('/')
+        parts.forEach(p => { const t = p.trim(); if (t) purposeMap[t] = (purposeMap[t] || 0) + 1 })
     })
     return {
         total: data.length,
@@ -42,10 +44,10 @@ const handleReset = () => { searchParams.value = { artifactCode: '', artifactNam
 
 const detailVisible = ref(false); const detailData = ref({})
 const detailEditMode = ref(false); const detailBackup = ref({})
-const openDetail = (row) => { detailData.value = { ...row }; detailEditMode.value = false; detailVisible.value = true }
-const enterDetailEditMode = () => { detailBackup.value = { ...detailData.value }; detailEditMode.value = true }
+const openDetail = (row) => { detailData.value = { ...row }; detailEditMode.value = false; detailVisible.value = true; detailCascader.value = [] }
+const enterDetailEditMode = () => { detailBackup.value = { ...detailData.value }; detailEditMode.value = true; detailCascader.value = parsePath(detailData.value.excavationRelic || '') }
 const cancelDetailEdit = () => { detailData.value = { ...detailBackup.value }; detailEditMode.value = false }
-const saveDetailEdit = async () => { await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
+const saveDetailEdit = async () => { detailData.value.excavationRelic = getPath(detailCascader.value); await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
 
 const del = (row) => { ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }).then(async () => { await request.delete('/admin/detection/' + row.id); ElMessage.success('删除成功'); fetchList() }).catch(() => {}) }
 
@@ -97,15 +99,89 @@ const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([h]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'模板'); XLSX.writeFile(wb,'检测导入模板.xlsx')
 }
 
+// ========== 目的多选对话框 ==========
+const purposeDialogVisible = ref(false)
+const purposeTarget = ref('addForm')  // 'addForm' | 'detailData' | 'editData'
+// 每个选项生成唯一key（分类名+选项名），存储和显示只用选项名
+const purposeCategories = [
+    { name: '金属', options: ['超景深','金相','扫描电镜-能谱','XRF','XRD','拉曼','X探伤','其他'] },
+    { name: '非金属', options: ['超景深','扫描电镜-能谱','拉曼','其他','ICP-MS','XRD','CT'] },
+    { name: '文物环境', options: ['PH计','离子色谱','微生物检查','其他'] },
+    { name: '有机类', options: ['PH计','离子色谱','微生物检查','其他'] },
+]
+
+const purposeChecked = ref([])  // 唯一key数组，如 ['金属__金相','非金属__拉曼']
+const purposeCustom = ref({})   // 每个"其他"的自定义文本，如 { '金属__其他': '自定义A/自定义B' }
+
+const purposeKey = (cat, opt) => cat + '__' + opt
+const isOtherChecked = (catName) => purposeChecked.value.includes(purposeKey(catName, '其他'))
+
+const openPurposeDialog = (target) => {
+    purposeTarget.value = target
+    const current = target === 'addForm' ? addForm.value.purpose : target === 'detailData' ? detailData.value.purpose : editData.value.purpose
+    const stored = current ? current.split('/').map(s => s.trim()).filter(Boolean) : []
+    // 已知选项直接映射为唯一key，否则归类为对应分类的"其他"自定义值
+    const checked = []; const custom = {}
+    stored.forEach(s => {
+        const cat = purposeCategories.find(c => c.options.includes(s))
+        if (cat) checked.push(purposeKey(cat.name, s))
+        else {
+            // 未知实验名放入第一个包含"其他"的分类
+            const firstOther = purposeCategories.find(c => c.options.includes('其他'))
+            if (firstOther) { const k = purposeKey(firstOther.name, '其他'); if (!checked.includes(k)) checked.push(k); custom[k] = custom[k] ? custom[k] + '/' + s : s }
+        }
+    })
+    purposeChecked.value = checked
+    purposeCustom.value = custom
+    purposeDialogVisible.value = true
+}
+const confirmPurpose = () => {
+    const parts = purposeChecked.value.map(k => {
+        const idx = k.indexOf('__'); const name = idx > -1 ? k.slice(idx + 2) : k
+        return name === '其他' ? (purposeCustom.value[k] || '') : name
+    }).filter(Boolean)
+    const selected = parts.join('/')
+    if (purposeTarget.value === 'addForm') addForm.value.purpose = selected
+    else if (purposeTarget.value === 'detailData') detailData.value.purpose = selected
+    else editData.value.purpose = selected
+    purposeDialogVisible.value = false
+}
+
+// ========== 出土遗迹级联选择器 ==========
+const burialData = ref([])  // 全部墓葬数据
+const cascaderOptions = computed(() => burialData.value.map(b => {
+    const children = []
+    if (b.hasChariot) {
+        const chariotChildren = []
+        for (let i = 1; i <= (b.chariotCount || 0); i++) chariotChildren.push({ value: '车' + i, label: '车' + i })
+        children.push({ value: '车', label: '车', children: chariotChildren.length >= 2 ? chariotChildren : undefined })
+    }
+    if (b.horseCount > 0) {
+        const horseChildren = []
+        for (let i = 1; i <= (b.horseCount || 0); i++) horseChildren.push({ value: '马' + i, label: '马' + i })
+        children.push({ value: '马', label: '马', children: horseChildren.length >= 2 ? horseChildren : undefined })
+    }
+    children.push({ value: '墓葬出土', label: '墓葬出土' })
+    return { value: (b.burialNo || '') + (b.name && b.name !== b.burialNo ? ' ' + b.name : ''), label: (b.burialNo || '') + (b.name && b.name !== b.burialNo ? ' ' + b.name : ''), children }
+}))
+const fetchBurialData = async () => { const res = await request.get('/admin/burial/list/simple'); burialData.value = res.data || [] }
+
+// Cascader值 → 路径字符串
+const getPath = (arr) => arr?.join('/') || ''
+// 路径字符串 → Cascader数组
+const parsePath = (str) => str ? str.split('/') : []
+
+const addCascader = ref([]); const detailCascader = ref([]); const editCascader = ref([])
+
 const addVisible = ref(false)
 const addForm = ref({ artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' })
-const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; addCascader.value = []; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
-const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true }
-const submitEdit = async () => { await request.put('/admin/detection/' + editData.value.id, editData.value); ElMessage.success('保存成功'); editVisible.value = false; fetchList() }
+const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true; editCascader.value = parsePath(row.excavationRelic || '') }
+const submitEdit = async () => { editData.value.excavationRelic = getPath(editCascader.value); await request.put('/admin/detection/' + editData.value.id, editData.value); ElMessage.success('保存成功'); editVisible.value = false; fetchList() }
 
-onMounted(() => { fetchList() })
+onMounted(() => { fetchList(); fetchBurialData() })
 </script>
 
 <template>
@@ -197,13 +273,13 @@ onMounted(() => { fetchList() })
             <el-form :model="detailData" label-width="100px"><el-row :gutter="16">
                 <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="detailData.artifactCode" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="detailData.artifactName" /></el-form-item></el-col>
-                <el-col :span="12"><el-form-item label="出土遗迹"><el-input v-model="detailData.excavationRelic" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="出土遗迹"><el-cascader v-model="detailCascader" :options="cascaderOptions" placeholder="请选择出土遗迹" clearable style="width:100%" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="detailData.samplePosition" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="detailData.sampleMaterial" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="样品状态"><el-input v-model="detailData.sampleStatus" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="样品数量"><el-input v-model="detailData.sampleQuantity" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="取样方法"><el-input v-model="detailData.sampleMethod" /></el-form-item></el-col>
-                <el-col :span="12"><el-form-item label="目的"><el-input v-model="detailData.purpose" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="目的"><el-input v-model="detailData.purpose" placeholder="点击选择实验项目" readonly @click="openPurposeDialog('detailData')" style="cursor:pointer" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="detailData.storageLocation" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="detailData.departureTime" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="去处"><el-input v-model="detailData.destination" /></el-form-item></el-col>
@@ -220,15 +296,15 @@ onMounted(() => { fetchList() })
         <el-form :model="addForm" label-width="100px"><el-row :gutter="16">
             <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="addForm.artifactCode" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="addForm.artifactName" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="出土遗迹"><el-input v-model="addForm.excavationRelic" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="出土遗迹"><el-cascader v-model="addCascader" :options="cascaderOptions" placeholder="请选择出土遗迹" clearable style="width:100%" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="addForm.samplePosition" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="addForm.sampleMaterial" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品状态"><el-input v-model="addForm.sampleStatus" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品数量"><el-input v-model="addForm.sampleQuantity" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样方法"><el-input v-model="addForm.sampleMethod" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="目的"><el-input v-model="addForm.purpose" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="目的"><el-input v-model="addForm.purpose" placeholder="点击选择实验项目" readonly @click="openPurposeDialog('addForm')" style="cursor:pointer" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="addForm.storageLocation" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="addForm.departureTime" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="出库时间"><el-date-picker v-model="addForm.departureTime" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY/MM/DD" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="addForm.destination" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="addForm.samplePhoto" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="管理人"><el-input v-model="addForm.manager" /></el-form-item></el-col>
@@ -242,13 +318,13 @@ onMounted(() => { fetchList() })
         <el-form :model="editData" label-width="100px"><el-row :gutter="16">
             <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="editData.artifactCode" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="editData.artifactName" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="出土遗迹"><el-input v-model="editData.excavationRelic" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="出土遗迹"><el-cascader v-model="editCascader" :options="cascaderOptions" placeholder="请选择出土遗迹" clearable style="width:100%" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="editData.samplePosition" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="editData.sampleMaterial" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品状态"><el-input v-model="editData.sampleStatus" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="样品数量"><el-input v-model="editData.sampleQuantity" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样方法"><el-input v-model="editData.sampleMethod" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="目的"><el-input v-model="editData.purpose" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="目的"><el-input v-model="editData.purpose" placeholder="点击选择实验项目" readonly @click="openPurposeDialog('editData')" style="cursor:pointer" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="editData.storageLocation" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="editData.departureTime" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="editData.destination" /></el-form-item></el-col>
@@ -267,6 +343,23 @@ onMounted(() => { fetchList() })
             <el-form-item label="Excel文件"><el-upload ref="uploadRef" :auto-upload="false" :on-change="handleImportFile" accept=".xlsx,.xls" :limit="1"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
         </el-form>
         <template #footer><el-button @click="importVisible = false">取消</el-button><el-button type="primary" @click="handleImport">开始导入</el-button></template>
+    </el-dialog>
+    <!-- 目的多选对话框 -->
+    <el-dialog v-model="purposeDialogVisible" title="实验设计" width="600px">
+        <div v-for="cat in purposeCategories" :key="cat.name" style="margin-bottom:12px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:6px;color:#1D2129">{{ cat.name }}</div>
+            <el-checkbox-group v-model="purposeChecked">
+                <template v-for="opt in cat.options" :key="cat.name + '__' + opt">
+                    <el-checkbox :label="cat.name + '__' + opt" style="margin-right:4px;margin-bottom:4px">{{ opt }}</el-checkbox>
+                    <el-input v-if="opt === '其他' && isOtherChecked(cat.name)"
+                        v-model="purposeCustom[cat.name + '__' + '其他']"
+                        placeholder="自定义实验，用/隔开"
+                        size="small"
+                        style="width:200px;margin-left:4px;display:inline-block" />
+                </template>
+            </el-checkbox-group>
+        </div>
+        <template #footer><el-button @click="purposeDialogVisible = false">取消</el-button><el-button type="primary" @click="confirmPurpose">确定</el-button></template>
     </el-dialog>
 </template>
 
