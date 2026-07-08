@@ -48,13 +48,13 @@ const menuTitleMap = {
     '/show/manage': '展示界面',
     '/artifacts/manage': '文物信息总览',
     '/tomb/manage': '墓葬总览',
-    '/tomb/basic': '基本资料',
+    '/tomb/basic': '工作流程',
     '/tomb/excavation': '墓葬出土',
     '/tomb/coffin': '棺信息',
-    '/tomb/coffin/basic': '棺基本资料',
+    '/tomb/coffin/basic': '棺工作流程',
     '/tomb/coffin/artifacts': '棺出土文物',
     '/tomb/chariot': '车信息',
-    '/tomb/chariot/basic': '车基本资料',
+    '/tomb/chariot/basic': '车工作流程',
     '/tomb/chariot/artifacts': '车出土文物',
     '/detection/manage': '文物检测分析',
     '/detection/overview': '检测分析总览',
@@ -117,16 +117,16 @@ const handleCommand = (command) => {
                         <span>墓葬信息</span>
                     </template>
                     <el-menu-item index="/tomb/manage">墓葬总览</el-menu-item>
-                    <el-menu-item index="/tomb/basic">基本资料</el-menu-item>
+                    <el-menu-item index="/tomb/basic">工作流程</el-menu-item>
                     <el-menu-item index="/tomb/excavation">墓葬出土</el-menu-item>
                     <el-sub-menu index="/tomb/coffin/group">
                         <template #title><span>棺信息</span></template>
-                        <el-menu-item index="/tomb/coffin/basic">基本资料</el-menu-item>
+                        <el-menu-item index="/tomb/coffin/basic">工作流程</el-menu-item>
                         <el-menu-item index="/tomb/coffin/artifacts">棺出土文物</el-menu-item>
                     </el-sub-menu>
                     <el-sub-menu index="/tomb/chariot/group">
                         <template #title><span>车信息</span></template>
-                        <el-menu-item index="/tomb/chariot/basic">基本资料</el-menu-item>
+                        <el-menu-item index="/tomb/chariot/basic">工作流程</el-menu-item>
                         <el-menu-item index="/tomb/chariot/artifacts">车出土文物</el-menu-item>
                     </el-sub-menu>
                 </el-sub-menu>
