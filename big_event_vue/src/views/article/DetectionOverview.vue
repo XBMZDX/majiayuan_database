@@ -31,16 +31,36 @@ const fetchList = async () => {
 const pageNum = ref(1); const pageSize = ref(10)
 const paged = computed(() => list.value.slice((pageNum.value-1)*pageSize.value, pageNum.value*pageSize.value))
 
-const searchParams = ref({ artifactCode: '', artifactName: '', excavationRelic: '', sampleMaterial: '' })
+// 实验分类（须在 purposeOptions 之前定义）
+const purposeCategories = [
+    { name: '金属', options: ['超景深','金相','扫描电镜-能谱','XRF','XRD','拉曼','X探伤','其他'] },
+    { name: '非金属', options: ['超景深','扫描电镜-能谱','拉曼','其他','ICP-MS','XRD','CT'] },
+    { name: '文物环境', options: ['PH计','离子色谱','微生物检查','其他'] },
+    { name: '有机类', options: ['PH计','离子色谱','微生物检查','其他'] },
+]
+
+const searchParams = ref({ artifactCode: '', artifactName: '', sampleMaterial: '', purpose: '' })
+const filterCascader = ref([])
+// 材质下拉选项（与文物信息总览保持一致的一级材质）
+const materialOptions = [
+    { label: '金属', value: '金属' }, { label: '人工硅酸盐', value: '人工硅酸盐' },
+    { label: '玉石', value: '玉石' }, { label: '陶制', value: '陶制' },
+    { label: '动物源有机质', value: '动物源有机质' }, { label: '植物源有机质', value: '植物源有机质' },
+    { label: '漆器', value: '漆器' }
+]
+// 目的下拉选项（从实验设计去重，不含"其他"）
+const purposeOptions = (() => { const s = new Set(); purposeCategories.forEach(c => c.options.forEach(o => { if (o !== '其他') s.add(o) })); return [...s].map(o => ({ label: o, value: o })) })()
+
 const filtered = computed(() => list.value.filter(r =>
     (!searchParams.value.artifactCode || (r.artifactCode||'').includes(searchParams.value.artifactCode)) &&
     (!searchParams.value.artifactName || (r.artifactName||'').includes(searchParams.value.artifactName)) &&
-    (!searchParams.value.excavationRelic || (r.excavationRelic||'').includes(searchParams.value.excavationRelic)) &&
-    (!searchParams.value.sampleMaterial || (r.sampleMaterial||'').includes(searchParams.value.sampleMaterial))
+    (!filterCascader.value.length || (r.excavationRelic||'').includes(getPath(filterCascader.value))) &&
+    (!searchParams.value.sampleMaterial || (r.sampleMaterial||'').includes(searchParams.value.sampleMaterial)) &&
+    (!searchParams.value.purpose || (r.purpose||'').includes(searchParams.value.purpose))
 ))
 const pagedFiltered = computed(() => filtered.value.slice((pageNum.value-1)*pageSize.value, pageNum.value*pageSize.value))
 const handleSearch = () => { pageNum.value = 1 }
-const handleReset = () => { searchParams.value = { artifactCode: '', artifactName: '', excavationRelic: '', sampleMaterial: '' }; pageNum.value = 1 }
+const handleReset = () => { searchParams.value = { artifactCode: '', artifactName: '', sampleMaterial: '', purpose: '' }; filterCascader.value = []; pageNum.value = 1 }
 
 const detailVisible = ref(false); const detailData = ref({})
 const detailEditMode = ref(false); const detailBackup = ref({})
@@ -102,13 +122,6 @@ const downloadTemplate = () => {
 // ========== 目的多选对话框 ==========
 const purposeDialogVisible = ref(false)
 const purposeTarget = ref('addForm')  // 'addForm' | 'detailData' | 'editData'
-// 每个选项生成唯一key（分类名+选项名），存储和显示只用选项名
-const purposeCategories = [
-    { name: '金属', options: ['超景深','金相','扫描电镜-能谱','XRF','XRD','拉曼','X探伤','其他'] },
-    { name: '非金属', options: ['超景深','扫描电镜-能谱','拉曼','其他','ICP-MS','XRD','CT'] },
-    { name: '文物环境', options: ['PH计','离子色谱','微生物检查','其他'] },
-    { name: '有机类', options: ['PH计','离子色谱','微生物检查','其他'] },
-]
 
 const purposeChecked = ref([])  // 唯一key数组，如 ['金属__金相','非金属__拉曼']
 const purposeCustom = ref({})   // 每个"其他"的自定义文本，如 { '金属__其他': '自定义A/自定义B' }
@@ -175,7 +188,12 @@ const addCascader = ref([]); const detailCascader = ref([]); const editCascader 
 
 const addVisible = ref(false)
 const addForm = ref({ artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' })
-const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; addCascader.value = []; fetchList() }
+const resetAddForm = () => {
+    addForm.value = { artifactCode:'',artifactName:'',excavationRelic:'',samplePosition:'',sampleMaterial:'',sampleStatus:'',sampleQuantity:'',sampleMethod:'',purpose:'',storageLocation:'',departureTime:'',destination:'',samplePhoto:'',analysisData:'',analysisReport:'',manager:'',sampler:'',notes:'' }
+    addCascader.value = []
+}
+const onAddClosed = () => { resetAddForm() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
 const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true; editCascader.value = parsePath(row.excavationRelic || '') }
@@ -200,11 +218,13 @@ onMounted(() => { fetchList(); fetchBurialData() })
 
         <el-card shadow="never" class="filter-card">
             <div class="filter-bar">
-                <el-input v-model="searchParams.artifactCode" placeholder="文物编号" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-                <el-input v-model="searchParams.artifactName" placeholder="文物名称" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-                <el-input v-model="searchParams.excavationRelic" placeholder="出土遗迹" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-                <el-input v-model="searchParams.sampleMaterial" placeholder="样品材质" clearable style="width:160px" @keyup.enter="handleSearch" @clear="handleSearch" />
-                <el-button type="primary" @click="handleSearch">搜索</el-button>
+                <el-cascader v-model="filterCascader" :options="cascaderOptions" placeholder="出土遗迹" clearable style="width:200px" @change="handleSearch" />
+                <el-select v-model="searchParams.sampleMaterial" placeholder="材质" clearable @change="handleSearch" style="width:140px">
+                    <el-option v-for="m in materialOptions" :key="m.value" :label="m.label" :value="m.value" />
+                </el-select>
+                <el-select v-model="searchParams.purpose" placeholder="目的" clearable @change="handleSearch" style="width:140px">
+                    <el-option v-for="p in purposeOptions" :key="p.value" :label="p.label" :value="p.value" />
+                </el-select>
                 <el-button @click="handleReset">重置</el-button>
             </div>
         </el-card>
@@ -292,7 +312,7 @@ onMounted(() => { fetchList(); fetchBurialData() })
         </template>
     </el-dialog>
 
-    <el-dialog v-model="addVisible" title="添加检测" width="700px" :close-on-click-modal="false" destroy-on-close>
+    <el-dialog v-model="addVisible" title="添加检测" width="700px" :close-on-click-modal="false" destroy-on-close @close="onAddClosed">
         <el-form :model="addForm" label-width="100px"><el-row :gutter="16">
             <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="addForm.artifactCode" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="addForm.artifactName" /></el-form-item></el-col>
