@@ -5,6 +5,7 @@ import LayoutVue from '@/views/layout.vue'
 import ArtifactsManage from '@/views/article/ArtifactsManage.vue'
 import show from '@/views/article/show.vue'
 import TombManage from '@/views/article/TombManage.vue'
+import TombWorkflow from '@/views/article/TombWorkflow.vue'
 import TombExcavation from '@/views/article/TombExcavation.vue'
 import CoffinBasic from '@/views/article/CoffinBasic.vue'
 import CoffinArtifacts from '@/views/article/CoffinArtifacts.vue'
@@ -14,6 +15,7 @@ import DetectionAnalysis from '@/views/article/DetectionAnalysis.vue'
 import Conservation from '@/views/article/Conservation.vue'
 import Restoration from '@/views/article/Restoration.vue'
 import DigitalLibrary from '@/views/article/DigitalLibrary.vue'
+import DigitalArchive from '@/views/article/DigitalArchive.vue'
 import AiChat from '@/views/article/AiChat.vue'
 import DetectionOverview from '@/views/article/DetectionOverview.vue'
 import DetectionResult from '@/views/article/DetectionResult.vue'
@@ -30,7 +32,7 @@ const routes = [
         {path:'/show/manage',component:show},
         {path:'/artifacts/manage',component:ArtifactsManage},
         {path:'/tomb/manage',component:TombManage},
-        {path:'/tomb/basic',component:TombManage},
+        {path:'/tomb/basic',component:TombWorkflow},
         {path:'/tomb/excavation',component:TombExcavation},
         {path:'/tomb/coffin',component:TombManage},
         {path:'/tomb/coffin/basic',component:CoffinBasic},
@@ -46,6 +48,7 @@ const routes = [
         {path:'/conservation/manage',component:Conservation},
         {path:'/restoration/manage',component:Restoration},
         {path:'/library/manage',component:DigitalLibrary},
+        {path:'/archive/manage',component:DigitalArchive},
         {path:'/ai/manage',component:AiChat},
         {path:'/user/info',component:UserInfoVue},
         {path:'/user/avatar',component:UserAvatarVue},

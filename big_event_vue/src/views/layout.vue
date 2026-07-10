@@ -63,8 +63,9 @@ const menuTitleMap = {
     '/detection/image': '检测分析图片',
     '/conservation/manage': '文物保护',
     '/restoration/manage': '文物复原',
-    '/library/manage': '电子图书馆',
-    '/ai/manage': 'AI对话',
+    '/archive/manage': '文物数字档案中心',
+    '/library/manage': '知识中心',
+    '/ai/manage': 'AI智能助手',
     '/user/info': '基本资料',
     '/user/avatar': '更换头像',
     '/user/resetPassword': '重置密码'
@@ -148,13 +149,17 @@ const handleCommand = (command) => {
                     <el-icon><Umbrella /></el-icon>
                     <span>文物复原</span>
                 </el-menu-item>
+                <el-menu-item index="/archive/manage">
+                    <el-icon><Reading /></el-icon>
+                    <span>文物数字档案中心</span>
+                </el-menu-item>
                 <el-menu-item index="/library/manage">
                     <el-icon><Reading /></el-icon>
-                    <span>电子图书馆</span>
+                    <span>知识中心</span>
                 </el-menu-item>
                 <el-menu-item index="/ai/manage">
                     <el-icon><ChatDotSquare /></el-icon>
-                    <span>AI对话</span>
+                    <span>AI智能助手</span>
                 </el-menu-item>
                 <el-sub-menu index="/user">
                     <template #title>
