@@ -6,21 +6,17 @@ const stats = ref({ total: 8, done: 3, doing: 4, pending: 1, materials: 156, pho
 
 // ========== 流程树（左侧） ==========
 const treeData = ref([
-    { id: 1, label: '前期准备', children: [
-        { id: 11, label: '资料收集' }, { id: 12, label: '现场勘查' }, { id: 13, label: '方案审批' }
-    ]},
-    { id: 2, label: '考古发掘', children: [
-        { id: 21, label: '探方布设' }, { id: 22, label: '地层清理' }, { id: 23, label: '遗迹记录' }
-    ]},
-    { id: 3, label: '文物保护', children: [
-        { id: 31, label: '现场保护' }, { id: 32, label: '实验室保护' }, { id: 33, label: '修复处理' }
-    ]},
-    { id: 4, label: '研究分析', children: [
-        { id: 41, label: '年代测定' }, { id: 42, label: '成分分析' }, { id: 43, label: '对比研究' }
-    ]},
-    { id: 5, label: '成果整理', children: [
-        { id: 51, label: '报告撰写' }, { id: 52, label: '图录编制' }, { id: 53, label: '档案归档' }
-    ]},
+    { id: 1, label: '前期调查' },
+    { id: 2, label: '考古勘探' },
+    { id: 3, label: '发掘准备' },
+    { id: 4, label: '墓葬发掘' },
+    { id: 5, label: '墓葬清理' },
+    { id: 6, label: '遗迹记录' },
+    { id: 7, label: '随葬品提取' },
+    { id: 8, label: '棺椁处理' },
+    { id: 9, label: '车马器处理' },
+    { id: 10, label: '整体提取' },
+    { id: 11, label: '现场清理' },
 ])
 
 const selectedNode = ref(null)
@@ -75,7 +71,13 @@ const detailData = computed(() => {
             <!-- 左侧：流程树 -->
             <el-card class="col-left" shadow="never">
                 <template #header><span style="font-weight:600">流程树</span></template>
-                <el-tree :data="treeData" node-key="id" default-expand-all :expand-on-click-node="false" highlight-current @node-click="onNodeClick" />
+                <div class="flow-tree">
+                    <div v-for="(node, idx) in treeData" :key="node.id" class="flow-node" :class="{ selected: selectedNode && selectedNode.id === node.id }" @click="onNodeClick(node)">
+                        <div class="flow-index">{{ idx + 1 }}</div>
+                        <div class="flow-label">{{ node.label }}</div>
+                        <div v-if="idx < treeData.length - 1" class="flow-connector"></div>
+                    </div>
+                </div>
             </el-card>
 
             <!-- 中间：流程时间轴 -->
@@ -128,6 +130,14 @@ const detailData = computed(() => {
 .sl { font-size: 11px; color: #999; margin-top: 2px; }
 .three-col { display: flex; gap: 12px; height: calc(100vh - 260px); }
 .col-left { flex: 0 0 220px; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; }
+.flow-tree { padding: 4px 0; }
+.flow-node { position: relative; display: flex; align-items: flex-start; padding: 12px 16px 12px 12px; cursor: pointer; transition: background .15s; }
+.flow-node:hover { background: #F7F8FA; }
+.flow-node.selected { background: #ECF5FF; }
+.flow-index { width: 24px; height: 24px; border-radius: 50%; background: #E5E6EB; color: #666; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 8px; }
+.flow-node.selected .flow-index { background: #1668C4; color: #fff; }
+.flow-connector { position: absolute; left: 11px; top: 36px; width: 1px; height: 24px; background: #E5E6EB; }
+.flow-label { font-size: 13px; color: #1D2129; line-height: 24px; }
 .col-center { flex: 1; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; }
 .col-right { flex: 0 0 260px; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; }
 .timeline-item { padding: 4px 0; }
