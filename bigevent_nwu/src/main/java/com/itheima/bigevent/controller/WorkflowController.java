@@ -56,7 +56,7 @@ public class WorkflowController {
     }
 
     @Mapper interface WorkflowTimelineMapper {
-        @Select("SELECT id, flow_id, event_date AS date, title, description AS `desc` FROM workflow_timeline ORDER BY event_date")
+        @Select("SELECT id, flow_id AS flowId, event_date AS date, title, description AS `desc` FROM workflow_timeline ORDER BY event_date")
         List<Map<String,Object>> list();
         @Delete("DELETE FROM workflow_timeline") void deleteAll();
         @Insert("INSERT INTO workflow_timeline (flow_id, event_date, title, description) VALUES (#{flowId}, #{date}, #{title}, #{desc})")

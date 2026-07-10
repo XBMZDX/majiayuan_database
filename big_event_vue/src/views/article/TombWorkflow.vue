@@ -13,11 +13,63 @@ const fetchTree = async () => { const res = await request.get('/admin/workflow/t
 const saveTreeToDB = async () => { await request.put('/admin/workflow/tree', treeData.value) }
 
 const selectedNode = ref(null)
-const filteredTimeline = computed(() => {
-    const data = selectedNode.value ? timelineData.value.filter(t => t.flowId === selectedNode.value.id) : timelineData.value
-    return [...data].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-})
 const onNodeClick = (node) => { selectedNode.value = selectedNode.value?.id === node.id ? null : node }
+
+// 11 种流程颜色
+const flowColors = ['#409EFF','#67C23A','#E6A23C','#F56C6C','#909399','#B37FEB','#36CFC9','#FF85C0','#FFC069','#95DE64','#5CDBD3']
+const getFlowColor = (flowId) => flowColors[(flowId - 1) % flowColors.length]
+
+// 全时间轴排序（跨流程）
+const sortedTimeline = computed(() => [...timelineData.value].sort((a, b) => (a.date || '').localeCompare(b.date || '')))
+
+// 按流程分组，同时记录每个事件在全排序中的位置
+const timelineGroups = computed(() => {
+    const groups = {}
+    treeData.value.forEach(t => { groups[t.id] = { label: t.label, events: [] } })
+    sortedTimeline.value.forEach((e, globalIdx) => {
+        const evt = { ...e, globalIdx }
+        if (groups[e.flowId]) groups[e.flowId].events.push(evt)
+        else { groups[e.flowId] = { label: '流程' + e.flowId, events: [evt] } }
+    })
+    return Object.entries(groups).filter(([, g]) => g.events.length > 0).map(([id, g]) => ({ flowId: parseInt(id), ...g }))
+})
+
+// 时间刻度：计算全局起止日期
+const timeRange = computed(() => {
+    if (!sortedTimeline.value.length) return { min: '2022', max: '2030', days: 2922 }
+    const dates = sortedTimeline.value.map(e => new Date(e.date)).filter(d => !isNaN(d))
+    if (!dates.length) return { min: '2022', max: '2030', days: 2922 }
+    const min = new Date(Math.min(...dates))
+    const max = new Date(Math.max(...dates))
+    // 扩展边界
+    min.setMonth(min.getMonth() - 1)
+    max.setMonth(max.getMonth() + 1)
+    return { min: min.toISOString().slice(0, 10), max: max.toISOString().slice(0, 10), days: Math.max((max - min) / 86400000, 1) }
+})
+
+// 日期 → 时间轴百分比位置
+const getTimePercent = (dateStr) => {
+    if (!dateStr || !timeRange.value.days) return 0
+    const d = new Date(dateStr)
+    const min = new Date(timeRange.value.min)
+    return Math.max(0, Math.min(100, ((d - min) / 86400000) / timeRange.value.days * 100))
+}
+
+// 生成刻度标签（每 N 个月一个）
+const scaleTicks = computed(() => {
+    if (!timeRange.value.days) return []
+    const ticks = []
+    const min = new Date(timeRange.value.min)
+    const max = new Date(timeRange.value.max)
+    const months = Math.ceil(timeRange.value.days / 30)
+    const step = Math.max(1, Math.ceil(months / 10))
+    let cur = new Date(min.getFullYear(), min.getMonth(), 1)
+    while (cur <= max) {
+        ticks.push({ label: cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'), pct: getTimePercent(cur.toISOString().slice(0, 10)) })
+        cur.setMonth(cur.getMonth() + step)
+    }
+    return ticks
+})
 
 // ========== 流程树编辑弹窗 ==========
 const editDialogVisible = ref(false)
@@ -64,6 +116,9 @@ onMounted(() => { fetchTree(); fetchTimeline() })
 const selectedEvent = ref(null)
 const onEventClick = (event) => { selectedEvent.value = event }
 
+// 判断某流程是否有时间节点
+const hasTimelineEvents = (flowId) => timelineData.value.some(e => e.flowId === flowId)
+
 // ========== 详情（右侧） ==========
 const detailData = computed(() => {
     if (!selectedEvent.value) return null
@@ -105,7 +160,7 @@ const detailData = computed(() => {
                 </template>
                 <div class="flow-tree">
                     <div v-for="(node, idx) in treeData" :key="node.id" class="flow-node" :class="{ selected: selectedNode && selectedNode.id === node.id }" @click="onNodeClick(node)">
-                        <div class="flow-index">{{ idx + 1 }}</div>
+                        <div class="flow-index" :style="hasTimelineEvents(node.id) ? {background: getFlowColor(node.id), color: '#fff'} : {}">{{ idx + 1 }}</div>
                         <div class="flow-label">{{ node.label }}</div>
                         <div v-if="idx < treeData.length - 1" class="flow-connector"></div>
                     </div>
@@ -120,20 +175,28 @@ const detailData = computed(() => {
                         <el-button type="primary" size="small" :icon="Edit" @click="openTimelineEdit">新增节点</el-button>
                     </div>
                 </template>
-                <el-timeline>
-                    <el-timeline-item
-                        v-for="item in filteredTimeline"
-                        :key="item.date"
-                        :timestamp="item.date"
-                        :color="item.status === 'done' ? '#67c23a' : item.status === 'doing' ? '#e6a23c' : '#909399'"
-                        placement="top"
-                    >
-                        <div class="timeline-item" @click="onEventClick(item)" style="cursor:pointer">
-                            <strong :class="item.status === 'done' ? 'text-done' : item.status === 'doing' ? 'text-doing' : 'text-pending'">{{ item.title }}</strong>
-                            <div style="font-size:12px;color:#999;margin-top:2px">{{ item.desc }}</div>
+                <div class="track-timeline">
+                    <div v-if="!timelineGroups.length" style="text-align:center;padding:40px;color:#ccc">暂无时间节点，点击右上角"新增节点"添加</div>
+                    <template v-else>
+                        <div v-for="group in timelineGroups" :key="group.flowId" class="track-row">
+                            <div class="track-label" :style="{color: getFlowColor(group.flowId)}">{{ group.label }}</div>
+                            <div class="track-bar">
+                                <div class="track-line" :style="{borderColor: getFlowColor(group.flowId)}"></div>
+                                <div v-for="(evt, i) in group.events" :key="i" class="track-dot-wrap" :style="{left: getTimePercent(evt.date) + '%'}">
+                                    <div class="track-dot" :style="{background: getFlowColor(group.flowId)}" @click="onEventClick(evt)" :title="evt.title + ' (' + evt.date + ')'"></div>
+                                    <div class="track-date">{{ evt.date }}</div>
+                                </div>
+                            </div>
                         </div>
-                    </el-timeline-item>
-                </el-timeline>
+                        <!-- 全局时间标尺 -->
+                        <div class="time-ruler">
+                            <div v-for="(tick, i) in scaleTicks" :key="i" class="tick" :style="{left: tick.pct + '%'}">
+                                <div class="tick-line"></div>
+                                <div class="tick-label">{{ tick.label }}</div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </el-card>
 
             <!-- 右侧：节点档案详情 -->
@@ -215,15 +278,24 @@ const detailData = computed(() => {
 .flow-node:hover { background: #F7F8FA; }
 .flow-node.selected { background: #ECF5FF; }
 .flow-index { width: 24px; height: 24px; border-radius: 50%; background: #E5E6EB; color: #666; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: 8px; }
-.flow-node.selected .flow-index { background: #1668C4; color: #fff; }
+.flow-node.selected .flow-index { box-shadow: 0 0 0 3px rgba(22,104,196,.3); }
 .flow-connector { position: absolute; left: 11px; top: 36px; width: 1px; height: 24px; background: #E5E6EB; }
 .flow-label { font-size: 13px; color: #1D2129; line-height: 24px; }
 .col-center { flex: 1; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; }
+.track-timeline { padding: 8px 0 40px 0; }
+.track-row { display: flex; align-items: center; margin-bottom: 16px; }
+.track-label { flex: 0 0 90px; font-size: 12px; font-weight: 600; text-align: right; padding-right: 8px; line-height: 1.3; margin-left: -8px; }
+.track-bar { flex: 1; position: relative; height: 64px; margin-left: -4px; }
+.track-line { position: absolute; top: 24px; left: 0; right: 0; border-top: 2px solid #E5E6EB; }
+.track-dot-wrap { position: absolute; top: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+.track-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: transform .15s; border: 2px solid #fff; box-shadow: 0 0 0 2px currentColor; }
+.track-dot:hover { transform: scale(1.3); }
+.track-date { font-size: 10px; color: #999; margin-top: 14px; text-align: center; white-space: nowrap; }
+.time-ruler { position: relative; height: 24px; margin-left: 78px; border-top: 1px solid #DCDFE6; }
+.tick { position: absolute; top: 0; transform: translateX(-50%); }
+.tick-line { width: 1px; height: 8px; background: #C0C4CC; margin: 0 auto; }
+.tick-label { font-size: 10px; color: #909399; margin-top: 2px; white-space: nowrap; }
 .col-right { flex: 0 0 260px; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; }
-.timeline-item { padding: 4px 0; }
-.text-done { color: #67c23a; }
-.text-doing { color: #e6a23c; }
-.text-pending { color: #909399; }
 .detail-panel { font-size: 13px; }
 .detail-title { font-size: 15px; font-weight: 700; color: #1D2129; }
 .detail-row { margin-bottom: 8px; }
