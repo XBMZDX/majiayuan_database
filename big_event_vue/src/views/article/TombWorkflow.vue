@@ -1,38 +1,65 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { Edit } from '@element-plus/icons-vue'
+import request from '@/utils/request.js'
 
 // ========== 统计卡片 ==========
 const stats = ref({ total: 8, done: 3, doing: 4, pending: 1, materials: 156, photos: 420, reports: 12, artifacts: 89 })
 
-// ========== 流程树（左侧） ==========
-const treeData = ref([
-    { id: 1, label: '前期调查' },
-    { id: 2, label: '考古勘探' },
-    { id: 3, label: '发掘准备' },
-    { id: 4, label: '墓葬发掘' },
-    { id: 5, label: '墓葬清理' },
-    { id: 6, label: '遗迹记录' },
-    { id: 7, label: '随葬品提取' },
-    { id: 8, label: '棺椁处理' },
-    { id: 9, label: '车马器处理' },
-    { id: 10, label: '整体提取' },
-    { id: 11, label: '现场清理' },
-])
+// ========== 流程树（左侧）—— 从 API 加载 ==========
+const treeData = ref([])
+
+const fetchTree = async () => { const res = await request.get('/admin/workflow/tree'); treeData.value = (res.data || []).map(t => ({ id: t.id, label: t.label })) }
+const saveTreeToDB = async () => { await request.put('/admin/workflow/tree', treeData.value) }
 
 const selectedNode = ref(null)
-const onNodeClick = (node) => { selectedNode.value = node }
+const filteredTimeline = computed(() => {
+    const data = selectedNode.value ? timelineData.value.filter(t => t.flowId === selectedNode.value.id) : timelineData.value
+    return [...data].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+})
+const onNodeClick = (node) => { selectedNode.value = selectedNode.value?.id === node.id ? null : node }
 
-// ========== 时间轴（中间） ==========
-const timelineData = ref([
-    { date: '2026-07-10', title: '资料收集完成', desc: '完成M62墓葬相关文献、测绘资料收集整理', status: 'done', nodeId: 11 },
-    { date: '2026-07-12', title: '现场勘查启动', desc: '对M62墓葬现场进行初步勘查', status: 'done', nodeId: 12 },
-    { date: '2026-07-15', title: '探方布设', desc: '布设5m×5m探方网格', status: 'done', nodeId: 21 },
-    { date: '2026-07-20', title: '地层清理进行中', desc: '第3层文化层清理，出土陶片若干', status: 'doing', nodeId: 22 },
-    { date: '2026-08-01', title: '遗迹记录', desc: '墓室结构测绘与影像记录', status: 'doing', nodeId: 23 },
-    { date: '2026-08-10', title: '现场保护', desc: '对脆弱文物进行临时加固', status: 'doing', nodeId: 31 },
-    { date: '2026-08-15', title: '实验室保护', desc: '文物转运至实验室，准备保护处理', status: 'doing', nodeId: 32 },
-    { date: '2026-09-01', title: '方案审批', desc: '发掘方案待提交审批', status: 'pending', nodeId: 13 },
-])
+// ========== 流程树编辑弹窗 ==========
+const editDialogVisible = ref(false)
+const dialogNodes = ref([])
+const dialogNewLabel = ref('')
+
+const openEditDialog = () => { dialogNodes.value = treeData.value.map(n => ({ ...n })); editDialogVisible.value = true }
+const dialogAdd = () => { if (!dialogNewLabel.value.trim()) return; const maxId = Math.max(...dialogNodes.value.map(n => n.id), 0); dialogNodes.value.push({ id: maxId + 1, label: dialogNewLabel.value.trim() }); dialogNewLabel.value = '' }
+const dialogRemove = (id) => { dialogNodes.value = dialogNodes.value.filter(n => n.id !== id) }
+const dialogMoveUp = (idx) => { if (idx > 0) { const t = dialogNodes.value[idx]; dialogNodes.value[idx] = dialogNodes.value[idx-1]; dialogNodes.value[idx-1] = t } }
+const dialogMoveDown = (idx) => { if (idx < dialogNodes.value.length - 1) { const t = dialogNodes.value[idx]; dialogNodes.value[idx] = dialogNodes.value[idx+1]; dialogNodes.value[idx+1] = t } }
+const saveDialog = () => { treeData.value = dialogNodes.value.map(n => ({ ...n })); editDialogVisible.value = false; selectedNode.value = null; saveTreeToDB() }
+const cancelDialog = () => { editDialogVisible.value = false }
+
+// ========== 时间轴编辑弹窗 ==========
+const timelineEditVisible = ref(false)
+const dialogTimeline = ref([])
+const newTitle = ref(''); const newDate = ref(''); const newDesc = ref(''); const newFlowId = ref(null)
+
+const openTimelineEdit = () => {
+    dialogTimeline.value = timelineData.value.map(t => ({ ...t }))
+    timelineEditVisible.value = true
+}
+const tlAdd = () => {
+    if (!newTitle.value.trim() || !newDate.value) return
+    dialogTimeline.value.push({ date: newDate.value, title: newTitle.value.trim(), desc: newDesc.value, status: 'pending', flowId: newFlowId.value || treeData.value[0]?.id || 1 })
+    newTitle.value = ''; newDate.value = ''; newDesc.value = ''; newFlowId.value = null
+}
+const tlRemove = (idx) => { dialogTimeline.value.splice(idx, 1) }
+const saveTimeline = () => {
+    if (newTitle.value.trim() && newDate.value) tlAdd()
+    dialogTimeline.value.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    timelineData.value = [...dialogTimeline.value.map(t => ({ ...t }))]; timelineEditVisible.value = false; selectedEvent.value = null
+    // 保存到数据库
+    request.put('/admin/workflow/timeline', timelineData.value)
+}
+
+// ========== 时间轴（中间）—— 从 API 加载 ==========
+const timelineData = ref([])
+const fetchTimeline = async () => { const res = await request.get('/admin/workflow/timeline'); timelineData.value = res.data || [] }
+
+onMounted(() => { fetchTree(); fetchTimeline() })
 
 const selectedEvent = ref(null)
 const onEventClick = (event) => { selectedEvent.value = event }
@@ -70,7 +97,12 @@ const detailData = computed(() => {
         <div class="three-col">
             <!-- 左侧：流程树 -->
             <el-card class="col-left" shadow="never">
-                <template #header><span style="font-weight:600">流程树</span></template>
+                <template #header>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-weight:600">流程树</span>
+                        <el-button type="primary" size="small" :icon="Edit" @click="openEditDialog">编辑</el-button>
+                    </div>
+                </template>
                 <div class="flow-tree">
                     <div v-for="(node, idx) in treeData" :key="node.id" class="flow-node" :class="{ selected: selectedNode && selectedNode.id === node.id }" @click="onNodeClick(node)">
                         <div class="flow-index">{{ idx + 1 }}</div>
@@ -82,10 +114,15 @@ const detailData = computed(() => {
 
             <!-- 中间：流程时间轴 -->
             <el-card class="col-center" shadow="never">
-                <template #header><span style="font-weight:600">流程时间轴</span></template>
+                <template #header>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-weight:600">流程时间轴</span>
+                        <el-button type="primary" size="small" :icon="Edit" @click="openTimelineEdit">新增节点</el-button>
+                    </div>
+                </template>
                 <el-timeline>
                     <el-timeline-item
-                        v-for="item in timelineData"
+                        v-for="item in filteredTimeline"
                         :key="item.date"
                         :timestamp="item.date"
                         :color="item.status === 'done' ? '#67c23a' : item.status === 'doing' ? '#e6a23c' : '#909399'"
@@ -120,6 +157,49 @@ const detailData = computed(() => {
             </el-card>
         </div>
     </div>
+
+    <!-- 流程树编辑弹窗 -->
+    <el-dialog v-model="editDialogVisible" title="编辑流程树" width="520px">
+        <div v-for="(node, idx) in dialogNodes" :key="node.id" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="width:28px;text-align:center;color:#999;font-size:13px">{{ idx + 1 }}</span>
+            <el-input v-model="node.label" size="small" style="flex:1" />
+            <el-button size="small" circle @click="dialogMoveUp(idx)" :disabled="idx===0">↑</el-button>
+            <el-button size="small" circle @click="dialogMoveDown(idx)" :disabled="idx===dialogNodes.length-1">↓</el-button>
+            <el-button size="small" circle type="danger" @click="dialogRemove(node.id)">✕</el-button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+            <el-input v-model="dialogNewLabel" size="small" placeholder="新流程名称" @keyup.enter="dialogAdd" style="flex:1" />
+            <el-button size="small" type="primary" @click="dialogAdd">新增</el-button>
+        </div>
+        <template #footer>
+            <el-button @click="cancelDialog">取消</el-button>
+            <el-button type="primary" @click="saveDialog">保存</el-button>
+        </template>
+    </el-dialog>
+
+    <!-- 时间轴编辑弹窗 -->
+    <el-dialog v-model="timelineEditVisible" title="编辑时间轴" width="680px" :close-on-click-modal="false">
+        <div v-for="(item, idx) in dialogTimeline" :key="idx" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="width:22px;text-align:center;color:#999;font-size:12px">{{ idx + 1 }}</span>
+            <el-date-picker v-model="item.date" type="date" size="small" style="width:120px" placeholder="日期" value-format="YYYY-MM-DD" />
+            <el-input v-model="item.title" size="small" style="width:130px" placeholder="标题" />
+            <el-select v-model="item.flowId" size="small" style="width:120px" placeholder="关联流程">
+                <el-option v-for="n in treeData" :key="n.id" :label="n.label" :value="n.id" />
+            </el-select>
+            <el-button size="small" circle type="danger" @click="tlRemove(idx)">✕</el-button>
+            <el-input v-model="item.desc" size="small" placeholder="描述" style="width:100%;margin-top:4px" />
+        </div>
+        <el-divider />
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <el-date-picker v-model="newDate" type="date" size="small" style="width:130px" placeholder="日期" value-format="YYYY-MM-DD" />
+            <el-input v-model="newTitle" size="small" style="width:140px" placeholder="标题" />
+            <el-select v-model="newFlowId" size="small" style="width:120px" placeholder="关联流程" clearable>
+                <el-option v-for="n in treeData" :key="n.id" :label="n.label" :value="n.id" />
+            </el-select>
+            <el-input v-model="newDesc" size="small" placeholder="描述" />
+        </div>
+        <template #footer><el-button @click="timelineEditVisible = false">取消</el-button><el-button type="primary" @click="saveTimeline">保存</el-button></template>
+    </el-dialog>
 </template>
 
 <style scoped>
