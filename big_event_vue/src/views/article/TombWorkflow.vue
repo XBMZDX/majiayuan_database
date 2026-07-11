@@ -188,8 +188,6 @@ const detailData = computed(() => {
                                 <div class="track-line" :style="{borderColor: getFlowColor(group.flowId)}"></div>
                                 <div v-for="(evt, i) in group.events" :key="i" class="track-dot-wrap" :style="{left: getTimePercent(evt.date) + '%'}">
                                     <div class="track-dot" :style="{background: getFlowColor(group.flowId)}" @click="onEventClick(evt)" :title="evt.title + ' (' + evt.date + ')'"></div>
-                                    <div class="track-event-title">{{ evt.title }}</div>
-                                    <div class="track-date">{{ evt.date }}</div>
                                 </div>
                             </div>
                         </div>
