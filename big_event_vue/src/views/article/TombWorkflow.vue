@@ -267,13 +267,13 @@ const detailData = computed(() => {
 </template>
 
 <style scoped>
-.workflow-page { padding: 0; display: flex; flex-direction: column; height: calc(100vh - 120px); }
-.stats-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.workflow-page { padding: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.stats-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; flex-shrink: 0; }
 .stat-card { flex: 1; min-width: 100px; text-align: center; border: 1px solid #E5E6EB; border-radius: 8px; }
 .sv { font-size: 24px; font-weight: 700; color: #1D2129; }
 .sl { font-size: 11px; color: #999; margin-top: 2px; }
 .three-col { display: flex; gap: 12px; flex: 1; min-height: 0; }
-.col-left { flex: 0 0 220px; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; height: 100%; }
+.col-left { flex: 0 0 220px; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
 .flow-tree { padding: 4px 0; }
 .flow-node { position: relative; display: flex; align-items: flex-start; padding: 12px 16px 12px 12px; cursor: pointer; transition: background .15s; }
 .flow-node:hover { background: #F7F8FA; }
@@ -282,8 +282,8 @@ const detailData = computed(() => {
 .flow-node.selected .flow-index { box-shadow: 0 0 0 3px rgba(22,104,196,.3); }
 .flow-connector { position: absolute; left: 11px; top: 36px; width: 1px; height: 24px; background: #E5E6EB; }
 .flow-label { font-size: 13px; color: #1D2129; line-height: 24px; }
-.col-center { flex: 1; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; height: 100%; }
-.track-timeline { padding: 8px 0; }
+.col-center { flex: 1; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
+.track-timeline { padding: 8px 0 16px 0; }
 .track-row { display: flex; align-items: center; margin-bottom: 6px; }
 .track-label { flex: 0 0 90px; font-size: 12px; font-weight: 600; text-align: right; padding-right: 8px; line-height: 1.3; margin-left: -8px; }
 .track-bar { flex: 1; position: relative; height: 48px; margin-left: -4px; }
@@ -293,11 +293,11 @@ const detailData = computed(() => {
 .track-dot:hover { transform: scale(1.3); }
 .track-event-title { font-size: 10px; color: #1D2129; text-align: center; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
 .track-date { font-size: 10px; color: #999; margin-top: 2px; text-align: center; white-space: nowrap; }
-.time-ruler { position: relative; height: 24px; margin: 0 16px 0 80px; border-top: 1px solid #DCDFE6; }
+.time-ruler { position: relative; height: 24px; margin: 8px 16px 0 80px; padding-top: 4px; border-top: 1px solid #DCDFE6; }
 .tick { position: absolute; top: 0; transform: translateX(-50%); }
 .tick-line { width: 1px; height: 8px; background: #C0C4CC; margin: 0 auto; }
 .tick-label { font-size: 10px; color: #909399; margin-top: 2px; white-space: nowrap; }
-.col-right { flex: 0 0 260px; overflow-y: auto; border: 1px solid #E5E6EB; border-radius: 8px; height: 100%; }
+.col-right { flex: 0 0 260px; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
 .detail-panel { font-size: 13px; }
 .detail-title { font-size: 15px; font-weight: 700; color: #1D2129; }
 .detail-row { margin-bottom: 8px; }
