@@ -61,4 +61,60 @@ public class WorkflowController {
         @Insert("INSERT INTO workflow_timeline (flow_id, event_date, title) VALUES (#{flowId}, #{date}, #{title})")
         void insert(int flowId, String date, String title);
     }
+
+    // ========== 备注 ==========
+    @Autowired private WorkflowNoteMapper noteMapper;
+
+    @GetMapping("/note/{timelineId}")
+    public Result<List<Map<String,Object>>> getNotes(@PathVariable int timelineId) {
+        return Result.success(noteMapper.listByTimeline(timelineId));
+    }
+    @PostMapping("/note")
+    public Result addNote(@RequestBody Map<String,Object> note) {
+        noteMapper.insert(
+            Integer.parseInt(note.get("timelineId").toString()),
+            note.get("noteType") != null ? note.get("noteType").toString() : "",
+            note.get("content") != null ? note.get("content").toString() : ""
+        );
+        return Result.success();
+    }
+    @DeleteMapping("/note/{id}")
+    public Result deleteNote(@PathVariable int id) { noteMapper.delete(id); return Result.success(); }
+
+    @Mapper interface WorkflowNoteMapper {
+        @Select("SELECT id, timeline_id AS timelineId, note_type AS noteType, content, create_time AS createTime FROM workflow_note WHERE timeline_id = #{timelineId} ORDER BY create_time")
+        List<Map<String,Object>> listByTimeline(int timelineId);
+        @Insert("INSERT INTO workflow_note (timeline_id, note_type, content) VALUES (#{timelineId}, #{type}, #{content})")
+        void insert(int timelineId, String type, String content);
+        @Delete("DELETE FROM workflow_note WHERE id = #{id}") void delete(int id);
+    }
+
+    // ========== 媒体 ==========
+    @Autowired private WorkflowMediaMapper mediaMapper;
+
+    @GetMapping("/media/{timelineId}")
+    public Result<List<Map<String,Object>>> getMedia(@PathVariable int timelineId) {
+        return Result.success(mediaMapper.listByTimeline(timelineId));
+    }
+    @PostMapping("/media")
+    public Result addMedia(@RequestBody Map<String,Object> media) {
+        mediaMapper.insert(
+            Integer.parseInt(media.get("timelineId").toString()),
+            media.get("mediaType") != null ? media.get("mediaType").toString() : "",
+            media.get("fileName") != null ? media.get("fileName").toString() : "",
+            media.get("fileUrl") != null ? media.get("fileUrl").toString() : "",
+            media.get("description") != null ? media.get("description").toString() : ""
+        );
+        return Result.success();
+    }
+    @DeleteMapping("/media/{id}")
+    public Result deleteMedia(@PathVariable int id) { mediaMapper.delete(id); return Result.success(); }
+
+    @Mapper interface WorkflowMediaMapper {
+        @Select("SELECT id, timeline_id AS timelineId, media_type AS mediaType, file_name AS fileName, file_url AS fileUrl, description, create_time AS createTime FROM workflow_media WHERE timeline_id = #{timelineId} ORDER BY create_time")
+        List<Map<String,Object>> listByTimeline(int timelineId);
+        @Insert("INSERT INTO workflow_media (timeline_id, media_type, file_name, file_url, description) VALUES (#{timelineId}, #{type}, #{name}, #{url}, #{desc})")
+        void insert(int timelineId, String type, String name, String url, String desc);
+        @Delete("DELETE FROM workflow_media WHERE id = #{id}") void delete(int id);
+    }
 }

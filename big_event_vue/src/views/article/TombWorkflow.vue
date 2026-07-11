@@ -218,7 +218,7 @@ const detailData = computed(() => {
                     <div class="detail-row"><label>报告</label><span>{{ detailData.reports }}</span></div>
                     <div class="detail-row"><label>人员</label><span>{{ detailData.personnel }}</span></div>
                 </div>
-                <div v-else class="detail-empty">点击时间轴节点查看详情</div>
+                <div v-else class="detail-empty">请选择时间轴节点查看档案</div>
             </el-card>
         </div>
     </div>
