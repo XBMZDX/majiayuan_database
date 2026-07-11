@@ -39,8 +39,7 @@ public class WorkflowController {
             timelineMapper.insert(
                 Integer.parseInt(item.get("flowId").toString()),
                 item.get("date") != null ? item.get("date").toString() : null,
-                item.get("title") != null ? item.get("title").toString() : "",
-                item.get("desc") != null ? item.get("desc").toString() : ""
+                item.get("title") != null ? item.get("title").toString() : ""
             );
         }
         return Result.success();
@@ -56,10 +55,10 @@ public class WorkflowController {
     }
 
     @Mapper interface WorkflowTimelineMapper {
-        @Select("SELECT id, flow_id AS flowId, event_date AS date, title, description AS `desc` FROM workflow_timeline ORDER BY event_date")
+        @Select("SELECT id, flow_id AS flowId, event_date AS date, title FROM workflow_timeline ORDER BY event_date")
         List<Map<String,Object>> list();
         @Delete("DELETE FROM workflow_timeline") void deleteAll();
-        @Insert("INSERT INTO workflow_timeline (flow_id, event_date, title, description) VALUES (#{flowId}, #{date}, #{title}, #{desc})")
-        void insert(int flowId, String date, String title, String desc);
+        @Insert("INSERT INTO workflow_timeline (flow_id, event_date, title) VALUES (#{flowId}, #{date}, #{title})")
+        void insert(int flowId, String date, String title);
     }
 }
