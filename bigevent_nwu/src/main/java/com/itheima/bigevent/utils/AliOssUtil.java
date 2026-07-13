@@ -20,9 +20,11 @@ public class AliOssUtil
      public static String uploadFile(String objectName,InputStream in) throws Exception
     {
         
-       // 从 application.yml 的 oss.access-key-id / oss.access-key-secret 读取
+       // 从环境变量/系统属性读取 OSS 凭证
         String ak = OSSConfig.getAccessKeyId();
         String sk = OSSConfig.getAccessKeySecret();
+        System.out.println("OSS AK=" + (ak != null ? ak.substring(0, Math.min(6, ak.length())) + "..." : "NULL"));
+        System.out.println("OSS SK=" + (sk != null ? "***" : "NULL"));
         com.aliyun.oss.common.auth.DefaultCredentialProvider credentialsProvider =
             new com.aliyun.oss.common.auth.DefaultCredentialProvider(ak, sk);
         // 填写Object完整路径，完整路径中不能包含Bucket名称，例如exampledir/exampleobject.txt。

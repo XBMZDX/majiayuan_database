@@ -1,23 +1,18 @@
 package com.itheima.bigevent.utils;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-import jakarta.annotation.PostConstruct;
-
-@Component
+/**
+ * 从系统环境变量读取 OSS 凭证，避免密钥泄漏到 Git
+ * 支持 Windows 环境变量和 JVM 系统属性
+ */
 public class OSSConfig {
-    @Value("${oss.access-key-id}")
-    private String accessKeyId;
-
-    @Value("${oss.access-key-secret}")
-    private String accessKeySecret;
-
-    private static String ak;
-    private static String sk;
-
-    @PostConstruct
-    public void init() { ak = accessKeyId; sk = accessKeySecret; }
-
-    public static String getAccessKeyId() { return ak; }
-    public static String getAccessKeySecret() { return sk; }
+    public static String getAccessKeyId() {
+        String v = System.getProperty("OSS_ACCESS_KEY_ID");
+        if (v != null && !v.isEmpty()) return v;
+        return System.getenv("OSS_ACCESS_KEY_ID");
+    }
+    public static String getAccessKeySecret() {
+        String v = System.getProperty("OSS_ACCESS_KEY_SECRET");
+        if (v != null && !v.isEmpty()) return v;
+        return System.getenv("OSS_ACCESS_KEY_SECRET");
+    }
 }
