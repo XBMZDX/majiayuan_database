@@ -120,6 +120,7 @@ const fetchTimeline = async () => { const res = await request.get('/admin/workfl
 onMounted(() => { fetchTree(); fetchTimeline() })
 
 const selectedEvent = ref(null)
+const fullArchiveVisible = ref(false)
 const onEventClick = (event) => { selectedEvent.value = event }
 
 // 判断某流程是否有时间节点
@@ -131,6 +132,8 @@ const detailData = computed(() => {
     return {
         title: selectedEvent.value.title,
         date: selectedEvent.value.date,
+        flowId: selectedEvent.value.flowId,
+        status: selectedEvent.value.status || 'pending',
         artifacts: '陶器12件、青铜器3件',
         photos: '现场照片45张、细节照片18张',
         reports: '地层记录1份、遗迹图2张',
@@ -203,20 +206,55 @@ const detailData = computed(() => {
             </el-card>
 
             <!-- 右侧：节点档案详情 -->
-            <el-card class="col-right" shadow="never">
+            <!-- 右侧：节点档案详情 -->
+            <el-card class="col-right" shadow="never" @dblclick="detailData && (fullArchiveVisible = true)">
                 <template #header><span style="font-weight:600">节点档案详情</span></template>
                 <div v-if="detailData" class="detail-panel">
-                    <div class="detail-title">{{ detailData.title }}</div>
-                    <el-divider style="margin:8px 0" />
-                    <div class="detail-row"><label>日期</label><span>{{ detailData.date }}</span></div>
-                    <div class="detail-row"><label>状态</label>
-                        <el-tag :type="detailData.status === 'done' ? 'success' : detailData.status === 'doing' ? 'warning' : 'info'" size="small">{{ detailData.status === 'done' ? '已完成' : detailData.status === 'doing' ? '进行中' : '待开始' }}</el-tag>
+                    <!-- ① 基本信息 -->
+                    <div class="detail-section">
+                        <el-descriptions :column="1" border size="small">
+                            <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
+                            <el-descriptions-item label="所属流程">{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}</el-descriptions-item>
+                            <el-descriptions-item label="所属墓葬">M62</el-descriptions-item>
+                            <el-descriptions-item label="节点时间">{{ detailData.date }}</el-descriptions-item>
+                            <el-descriptions-item label="当前状态">
+                                <el-tag :type="detailData.status === 'done' ? 'success' : detailData.status === 'doing' ? 'warning' : 'info'" size="small">{{ detailData.status === 'done' ? '已完成' : detailData.status === 'doing' ? '进行中' : '未开始' }}</el-tag>
+                            </el-descriptions-item>
+                            <el-descriptions-item label="负责人">{{ detailData.personnel || '张三（负责人）' }}</el-descriptions-item>
+                        </el-descriptions>
                     </div>
-                    <el-divider style="margin:8px 0" />
-                    <div class="detail-row"><label>关联文物</label><span>{{ detailData.artifacts }}</span></div>
-                    <div class="detail-row"><label>照片</label><span>{{ detailData.photos }}</span></div>
-                    <div class="detail-row"><label>报告</label><span>{{ detailData.reports }}</span></div>
-                    <div class="detail-row"><label>人员</label><span>{{ detailData.personnel }}</span></div>
+
+                    <!-- ② 最新工作记录 -->
+                    <div class="detail-section">
+                        <div class="section-title">最新工作记录<span class="section-more">查看更多 →</span></div>
+                        <div class="note-card">
+                            <div class="note-time">2026-07-10 14:30</div>
+                            <div class="note-content">完成墓葬测绘及三维扫描，出土陶器12件...</div>
+                        </div>
+                    </div>
+
+                    <!-- ③ 数据统计 -->
+                    <div class="detail-section">
+                        <div class="section-title">数据统计</div>
+                        <div class="stat-grid">
+                            <div class="stat-item"><div class="sn">12</div><div class="sl2">工作记录</div></div>
+                            <div class="stat-item"><div class="sn">45</div><div class="sl2">图片</div></div>
+                            <div class="stat-item"><div class="sn">3</div><div class="sl2">附件</div></div>
+                            <div class="stat-item"><div class="sn">89</div><div class="sl2">关联文物</div></div>
+                        </div>
+                    </div>
+
+                    <!-- ④ 最近图片 -->
+                    <div class="detail-section">
+                        <div class="section-title">最近图片</div>
+                        <el-empty v-if="false" description="暂无图片" :image-size="40" />
+                        <div v-else class="image-grid">
+                            <el-image v-for="i in 4" :key="i" src="" fallback-src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='60'><rect fill='%23E5E6EB' width='80' height='60' rx='4'/><text x='40' y='35' text-anchor='middle' fill='%23C0C4CC' font-size='10'>暂无</text></svg>" class="thumb-img" preview-teleported :preview-src-list="[]" />
+                        </div>
+                    </div>
+
+                    <!-- ⑤ 底部提示 -->
+                    <div class="detail-footer">双击查看完整档案</div>
                 </div>
                 <div v-else class="detail-empty">请选择时间轴节点查看档案</div>
             </el-card>
@@ -263,6 +301,22 @@ const detailData = computed(() => {
         </div>
         <template #footer><el-button @click="timelineEditVisible = false">取消</el-button><el-button type="primary" @click="saveTimeline">保存</el-button></template>
     </el-dialog>
+
+    <!-- 完整档案对话框 -->
+    <el-dialog v-model="fullArchiveVisible" title="完整档案" width="700px" :close-on-click-modal="false">
+        <div v-if="detailData" style="max-height:60vh;overflow-y:auto">
+            <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
+                <el-descriptions-item label="所属流程">{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="所属墓葬">M62</el-descriptions-item>
+                <el-descriptions-item label="节点时间">{{ detailData.date }}</el-descriptions-item>
+                <el-descriptions-item label="当前状态">{{ detailData.status === 'done' ? '已完成' : detailData.status === 'doing' ? '进行中' : '未开始' }}</el-descriptions-item>
+                <el-descriptions-item label="负责人">{{ detailData.personnel || '张三（负责人）' }}</el-descriptions-item>
+                <el-descriptions-item label="关联文物" :span="2">{{ detailData.artifacts || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="工作记录" :span="2">暂无记录</el-descriptions-item>
+            </el-descriptions>
+        </div>
+    </el-dialog>
 </template>
 
 <style scoped>
@@ -298,9 +352,19 @@ const detailData = computed(() => {
 .tick-label { font-size: 10px; color: #909399; margin-top: 2px; white-space: nowrap; }
 .col-right { flex: 0 0 260px; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
 .detail-panel { font-size: 13px; }
-.detail-title { font-size: 15px; font-weight: 700; color: #1D2129; }
-.detail-row { margin-bottom: 8px; }
-.detail-row label { font-size: 11px; color: #999; display: block; }
-.detail-row span { font-size: 13px; color: #1D2129; }
+.detail-section { margin-bottom: 16px; }
+.section-title { font-size: 13px; font-weight: 600; color: #1D2129; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.section-more { font-size: 11px; color: #409EFF; cursor: pointer; font-weight: 400; }
+.note-card { background: #F7F8FA; border-radius: 6px; padding: 10px 12px; }
+.note-time { font-size: 11px; color: #999; margin-bottom: 4px; }
+.note-content { font-size: 12px; color: #4E5969; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-item { background: #F7F8FA; border-radius: 6px; padding: 12px; text-align: center; transition: box-shadow .15s; cursor: default; }
+.stat-item:hover { box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.sn { font-size: 22px; font-weight: 700; color: #1D2129; }
+.sl2 { font-size: 11px; color: #999; margin-top: 2px; }
+.image-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.thumb-img { width: 100%; height: 60px; border-radius: 4px; object-fit: cover; cursor: pointer; }
+.detail-footer { font-size: 12px; color: #909399; text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #F0F0F0; }
 .detail-empty { text-align: center; padding: 60px 0; color: #ccc; font-size: 13px; }
 </style>
