@@ -2,15 +2,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { Edit } from '@element-plus/icons-vue'
 import request from '@/utils/request.js'
+import { useTokenStore } from '@/stores/token.js'
+const token = computed(() => useTokenStore().token)
 
-// ========== 统计卡片 ==========
-const stats = ref({ total: 8, done: 3, doing: 4, pending: 1, materials: 156, photos: 420, reports: 12, artifacts: 89 })
-
+// ========== 墓葬下拉选择 ==========
+const burialList = ref([])
+const selectedBurialId = ref(null)
+const fetchBurialList = async () => { const res = await request.get('/admin/burial/list/simple'); burialList.value = res.data || [] }
 // ========== 流程树（左侧）—— 从 API 加载 ==========
 const treeData = ref([])
 
-const fetchTree = async () => { const res = await request.get('/admin/workflow/tree'); treeData.value = (res.data || []).map(t => ({ id: t.id, label: t.label })) }
-const saveTreeToDB = async () => { await request.put('/admin/workflow/tree', treeData.value) }
+const fetchTree = async () => { if (!selectedBurialId.value) return; const res = await request.get('/admin/workflow/tree', {params:{burialId:selectedBurialId.value}}); treeData.value = (res.data || []).map(t => ({ id: t.id, label: t.label })) }
+const saveTreeToDB = async () => { if (!selectedBurialId.value) return; await request.put('/admin/workflow/tree', { burialId: selectedBurialId.value, nodes: treeData.value }) }
 
 const selectedNode = ref(null)
 const onNodeClick = (node) => { selectedNode.value = selectedNode.value?.id === node.id ? null : node }
@@ -86,14 +89,14 @@ const saveDialog = () => {
     const newIds = new Set(dialogNodes.value.map(n => n.id))
     timelineData.value = timelineData.value.filter(e => newIds.has(e.flowId))
     treeData.value = dialogNodes.value.map(n => ({ ...n })); editDialogVisible.value = false; selectedNode.value = null
-    saveTreeToDB(); request.put('/admin/workflow/timeline', timelineData.value)
+    saveTreeToDB(); request.put('/admin/workflow/timeline', { burialId: selectedBurialId.value, items: timelineData.value })
 }
 const cancelDialog = () => { editDialogVisible.value = false }
 
 // ========== 时间轴编辑弹窗 ==========
 const timelineEditVisible = ref(false)
 const dialogTimeline = ref([])
-const newTitle = ref(''); const newDate = ref(''); const newFlowId = ref(null)
+const newTitle = ref(''); const newDate = ref(''); const newStatus2 = ref('pending'); const newFlowId = ref(null)
 
 const openTimelineEdit = () => {
     dialogTimeline.value = timelineData.value.map(t => ({ ...t }))
@@ -101,8 +104,8 @@ const openTimelineEdit = () => {
 }
 const tlAdd = () => {
     if (!newTitle.value.trim() || !newDate.value) return
-    dialogTimeline.value.push({ date: newDate.value, title: newTitle.value.trim(), flowId: newFlowId.value || treeData.value[0]?.id || 1 })
-    newTitle.value = ''; newDate.value = ''; newFlowId.value = null
+    dialogTimeline.value.push({ date: newDate.value, title: newTitle.value.trim(), status: newStatus2.value, flowId: newFlowId.value || treeData.value[0]?.id || 1 })
+    newTitle.value = ''; newDate.value = ''; newStatus2.value = 'pending'; newFlowId.value = null
 }
 const tlRemove = (idx) => { dialogTimeline.value.splice(idx, 1) }
 const saveTimeline = () => {
@@ -110,18 +113,78 @@ const saveTimeline = () => {
     dialogTimeline.value.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     timelineData.value = [...dialogTimeline.value.map(t => ({ ...t }))]; timelineEditVisible.value = false; selectedEvent.value = null
     // 保存到数据库
-    request.put('/admin/workflow/timeline', timelineData.value)
+    request.put('/admin/workflow/timeline', { burialId: selectedBurialId.value, items: timelineData.value })
 }
 
 // ========== 时间轴（中间）—— 从 API 加载 ==========
 const timelineData = ref([])
-const fetchTimeline = async () => { const res = await request.get('/admin/workflow/timeline'); timelineData.value = res.data || [] }
+const fetchTimeline = async () => { if (!selectedBurialId.value) { timelineData.value = []; return }; const res = await request.get('/admin/workflow/timeline', {params:{burialId:selectedBurialId.value}}); timelineData.value = res.data || [] }
 
-onMounted(() => { fetchTree(); fetchTimeline() })
+const selectedBurialName = computed(() => {
+    const b = burialList.value.find(b => b.id === selectedBurialId.value)
+    return b ? ((b.burialNo||'') + (b.name && b.name !== b.burialNo ? ' ' + b.name : '')) : '未选择'
+})
+
+const onBurialChange = () => { fetchTree(); fetchTimeline() }
+
+onMounted(async () => { await fetchBurialList(); if (burialList.value.length > 0) { selectedBurialId.value = burialList.value[0].id; fetchTree(); fetchTimeline() } })
 
 const selectedEvent = ref(null)
 const fullArchiveVisible = ref(false)
-const onEventClick = (event) => { selectedEvent.value = event }
+const showAddDialog = ref(false)
+const addType = ref('note')
+const addForm2 = ref({ date: '', content: '', fileUrl: '', fileName: '', artifactCode: '' })
+
+const submitAddContent = async () => {
+    if (!selectedEvent.value) return
+    if (addType.value === 'note') {
+        if (!addForm2.value.content.trim()) return
+        let content = addForm2.value.content
+        if (addForm2.value.date) content = '[' + addForm2.value.date + '] ' + content
+        await request.post('/admin/workflow/note', { timelineId: selectedEvent.value.id, noteType: '工作记录', content })
+    } else {
+        // 根据文件扩展名自动判断媒体类型
+        let mediaType = addType.value === 'image' ? 'image' : 'file'
+        const ext = (addForm2.value.fileName || '').split('.').pop()?.toLowerCase()
+        if (['pdf','doc','docx'].includes(ext)) mediaType = 'document'
+        else if (['xls','xlsx'].includes(ext)) mediaType = 'spreadsheet'
+        else if (['dwg'].includes(ext)) mediaType = 'dwg'
+        else if (['zip','rar'].includes(ext)) mediaType = 'archive'
+        await request.post('/admin/workflow/media', { timelineId: selectedEvent.value.id, mediaType, fileName: addForm2.value.fileName, fileUrl: addForm2.value.fileUrl })
+    }
+    showAddDialog.value = false
+    addForm2.value = { date: '', content: '', fileUrl: '', fileName: '', artifactCode: '' }
+    loadArchiveData(selectedEvent.value.id)
+}
+
+const archiveTab = ref('notes')
+const archiveNotes = ref([])
+const archiveImages = ref([])
+const archiveFiles = ref([])
+
+const onEventClick = (event) => { selectedEvent.value = event; loadArchiveData(event.id) }
+const onEventDblClick = (event) => { selectedEvent.value = event; fullArchiveVisible = true; loadArchiveData(event.id) }
+
+const loadArchiveData = async (timelineId) => {
+    if (!timelineId) return
+    const [notesRes, mediaRes] = await Promise.all([
+        request.get('/admin/workflow/note/' + timelineId),
+        request.get('/admin/workflow/media/' + timelineId)
+    ])
+    archiveNotes.value = notesRes.data || []
+    const allMedia = mediaRes.data || []
+    archiveImages.value = allMedia.filter(m => m.mediaType === 'image')
+    archiveFiles.value = allMedia.filter(m => m.mediaType !== 'image')
+}
+
+// 备注管理
+const newNote = ref({ noteType: '', content: '' })
+const addNote = async () => {
+    if (!newNote.value.content.trim() || !selectedEvent.value) return
+    await request.post('/admin/workflow/note', { timelineId: selectedEvent.value.id, ...newNote.value })
+    newNote.value = { noteType: '', content: '' }; loadArchiveData(selectedEvent.value.id)
+}
+const deleteNote = async (id) => { await request.delete('/admin/workflow/note/' + id); loadArchiveData(selectedEvent.value?.id) }
 
 // 判断某流程是否有时间节点
 const hasTimelineEvents = (flowId) => timelineData.value.some(e => e.flowId === flowId)
@@ -137,22 +200,17 @@ const detailData = computed(() => {
         artifacts: '陶器12件、青铜器3件',
         photos: '现场照片45张、细节照片18张',
         reports: '地层记录1份、遗迹图2张',
-        personnel: '张三（负责人）、李四、王五',
     }
 })
 </script>
 
 <template>
     <div class="workflow-page">
-        <!-- 顶部统计卡片 -->
-        <div class="stats-row">
-            <el-card class="stat-card" shadow="never"><div class="sv">{{ stats.total }}</div><div class="sl">总阶段</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv" style="color:#67c23a">{{ stats.done }}</div><div class="sl">已完成</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv" style="color:#e6a23c">{{ stats.doing }}</div><div class="sl">进行中</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv">{{ stats.materials }}</div><div class="sl">资料数量</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv">{{ stats.photos }}</div><div class="sl">照片</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv">{{ stats.reports }}</div><div class="sl">报告</div></el-card>
-            <el-card class="stat-card" shadow="never"><div class="sv">{{ stats.artifacts }}</div><div class="sl">文物</div></el-card>
+        <!-- 墓葬选择器 -->
+        <div class="burial-selector">
+            <el-select v-model="selectedBurialId" placeholder="请选择墓葬" style="width:340px" size="large" @change="onBurialChange">
+                <el-option v-for="b in burialList" :key="b.id" :label="(b.burialNo||'') + (b.name && b.name !== b.burialNo ? ' ' + b.name : '')" :value="b.id" />
+            </el-select>
         </div>
 
         <!-- 三栏主体 -->
@@ -166,6 +224,7 @@ const detailData = computed(() => {
                     </div>
                 </template>
                 <div class="flow-tree">
+                    <div v-if="!treeData.length" style="text-align:center;padding:40px;color:#ccc;font-size:13px">请新建流程树</div>
                     <div v-for="(node, idx) in treeData" :key="node.id" class="flow-node" :class="{ selected: selectedNode && selectedNode.id === node.id }" @click="onNodeClick(node)">
                         <div class="flow-index" :style="hasTimelineEvents(node.id) ? {background: getFlowColor(node.id), color: '#fff'} : {}">{{ idx + 1 }}</div>
                         <div class="flow-label">{{ node.label }}</div>
@@ -183,14 +242,14 @@ const detailData = computed(() => {
                     </div>
                 </template>
                 <div class="track-timeline">
-                    <div v-if="!timelineGroups.length" style="text-align:center;padding:40px;color:#ccc">暂无时间节点，点击右上角"新增节点"添加</div>
+                    <div v-if="!timelineGroups.length" style="text-align:center;padding:40px;color:#ccc">请新建时间轴</div>
                     <template v-else>
                         <div v-for="group in timelineGroups" :key="group.flowId" class="track-row">
                             <div class="track-label" :style="{color: getFlowColor(group.flowId)}">{{ group.label }}</div>
                             <div class="track-bar">
                                 <div class="track-line" :style="{borderColor: getFlowColor(group.flowId)}"></div>
                                 <div v-for="(evt, i) in group.events" :key="i" class="track-dot-wrap" :style="{left: getTimePercent(evt.date) + '%'}">
-                                    <div class="track-dot" :style="{background: getFlowColor(group.flowId)}" @click="onEventClick(evt)" :title="evt.title + ' (' + evt.date + ')'"></div>
+                                    <div class="track-dot" :style="{background: getFlowColor(group.flowId)}" @click="onEventClick(evt)" @dblclick="onEventDblClick(evt)" :title="evt.title + ' (' + evt.date + ')'"></div>
                                 </div>
                             </div>
                         </div>
@@ -215,36 +274,25 @@ const detailData = computed(() => {
                         <el-descriptions :column="1" border size="small">
                             <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
                             <el-descriptions-item label="所属流程">{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}</el-descriptions-item>
-                            <el-descriptions-item label="所属墓葬">M62</el-descriptions-item>
+                            <el-descriptions-item label="所属墓葬">{{ selectedBurialName }}</el-descriptions-item>
                             <el-descriptions-item label="节点时间">{{ detailData.date }}</el-descriptions-item>
                             <el-descriptions-item label="当前状态">
                                 <el-tag :type="detailData.status === 'done' ? 'success' : detailData.status === 'doing' ? 'warning' : 'info'" size="small">{{ detailData.status === 'done' ? '已完成' : detailData.status === 'doing' ? '进行中' : '未开始' }}</el-tag>
                             </el-descriptions-item>
-                            <el-descriptions-item label="负责人">{{ detailData.personnel || '张三（负责人）' }}</el-descriptions-item>
                         </el-descriptions>
                     </div>
 
                     <!-- ② 最新工作记录 -->
                     <div class="detail-section">
                         <div class="section-title">最新工作记录<span class="section-more">查看更多 →</span></div>
-                        <div class="note-card">
-                            <div class="note-time">2026-07-10 14:30</div>
-                            <div class="note-content">完成墓葬测绘及三维扫描，出土陶器12件...</div>
+                        <div v-if="!archiveNotes.length" class="note-card"><div style="color:#ccc;text-align:center;font-size:12px">暂无记录</div></div>
+                        <div v-for="n in archiveNotes.slice(0,3)" :key="n.id" class="note-card" style="margin-bottom:6px">
+                            <div class="note-time">{{ n.createTime }}</div>
+                            <div class="note-content">{{ n.content }}</div>
                         </div>
                     </div>
 
-                    <!-- ③ 数据统计 -->
-                    <div class="detail-section">
-                        <div class="section-title">数据统计</div>
-                        <div class="stat-grid">
-                            <div class="stat-item"><div class="sn">12</div><div class="sl2">工作记录</div></div>
-                            <div class="stat-item"><div class="sn">45</div><div class="sl2">图片</div></div>
-                            <div class="stat-item"><div class="sn">3</div><div class="sl2">附件</div></div>
-                            <div class="stat-item"><div class="sn">89</div><div class="sl2">关联文物</div></div>
-                        </div>
-                    </div>
-
-                    <!-- ④ 最近图片 -->
+                    <!-- ③ 最近图片 -->
                     <div class="detail-section">
                         <div class="section-title">最近图片</div>
                         <el-empty v-if="false" description="暂无图片" :image-size="40" />
@@ -253,7 +301,7 @@ const detailData = computed(() => {
                         </div>
                     </div>
 
-                    <!-- ⑤ 底部提示 -->
+                    <!-- ④ 底部提示 -->
                     <div class="detail-footer">双击查看完整档案</div>
                 </div>
                 <div v-else class="detail-empty">请选择时间轴节点查看档案</div>
@@ -286,6 +334,9 @@ const detailData = computed(() => {
             <span style="width:22px;text-align:center;color:#999;font-size:12px">{{ idx + 1 }}</span>
             <el-date-picker v-model="item.date" type="date" size="small" style="width:120px" placeholder="日期" value-format="YYYY-MM-DD" />
             <el-input v-model="item.title" size="small" style="width:130px" placeholder="标题" />
+            <el-select v-model="item.status" size="small" style="width:80px">
+                <el-option label="已完成" value="done" /><el-option label="进行中" value="doing" /><el-option label="未开始" value="pending" />
+            </el-select>
             <el-select v-model="item.flowId" size="small" style="width:120px" placeholder="关联流程">
                 <el-option v-for="n in treeData" :key="n.id" :label="n.label" :value="n.id" />
             </el-select>
@@ -295,6 +346,9 @@ const detailData = computed(() => {
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <el-date-picker v-model="newDate" type="date" size="small" style="width:130px" placeholder="日期" value-format="YYYY-MM-DD" />
             <el-input v-model="newTitle" size="small" style="width:140px" placeholder="标题" />
+            <el-select v-model="newStatus2" size="small" style="width:80px" placeholder="状态">
+                <el-option label="已完成" value="done" /><el-option label="进行中" value="doing" /><el-option label="未开始" value="pending" />
+            </el-select>
             <el-select v-model="newFlowId" size="small" style="width:120px" placeholder="关联流程" clearable>
                 <el-option v-for="n in treeData" :key="n.id" :label="n.label" :value="n.id" />
             </el-select>
@@ -303,28 +357,84 @@ const detailData = computed(() => {
     </el-dialog>
 
     <!-- 完整档案对话框 -->
-    <el-dialog v-model="fullArchiveVisible" title="完整档案" width="700px" :close-on-click-modal="false">
-        <div v-if="detailData" style="max-height:60vh;overflow-y:auto">
-            <el-descriptions :column="2" border size="small">
+    <el-dialog v-model="fullArchiveVisible" title="节点档案" width="80%" top="10vh" :close-on-click-modal="false" @opened="loadArchiveData(selectedEvent?.id)">
+        <div v-if="detailData" style="height:70vh;display:flex;flex-direction:column">
+            <!-- 顶部固定信息 -->
+            <el-descriptions :column="3" border size="small" style="flex-shrink:0;margin-bottom:16px">
                 <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
                 <el-descriptions-item label="所属流程">{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="所属墓葬">M62</el-descriptions-item>
+                <el-descriptions-item label="所属墓葬">{{ selectedBurialName }}</el-descriptions-item>
                 <el-descriptions-item label="节点时间">{{ detailData.date }}</el-descriptions-item>
-                <el-descriptions-item label="当前状态">{{ detailData.status === 'done' ? '已完成' : detailData.status === 'doing' ? '进行中' : '未开始' }}</el-descriptions-item>
-                <el-descriptions-item label="负责人">{{ detailData.personnel || '张三（负责人）' }}</el-descriptions-item>
-                <el-descriptions-item label="关联文物" :span="2">{{ detailData.artifacts || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="工作记录" :span="2">暂无记录</el-descriptions-item>
+                <el-descriptions-item label="当前状态">
+                    <el-tag :type="detailData.status==='done'?'success':detailData.status==='doing'?'warning':'info'" size="small">{{ detailData.status==='done'?'已完成':detailData.status==='doing'?'进行中':'未开始' }}</el-tag>
+                </el-descriptions-item>
             </el-descriptions>
+            <!-- Tabs -->
+            <div style="display:flex;align-items:flex-start">
+            <el-tabs v-model="archiveTab" style="flex:1">
+                <el-tab-pane label="工作记录" name="notes">
+                    <div style="max-height:50vh;overflow-y:auto">
+                        <div v-for="n in archiveNotes" :key="n.id" style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #F0F0F0">
+                            <div style="flex:1"><div style="font-size:12px;color:#999">{{ n.createTime }}</div><div style="font-weight:600;margin:4px 0">{{ n.noteType }}</div><div style="font-size:13px;color:#4E5969">{{ n.content }}</div></div>
+                            <el-button size="small" type="danger" circle @click="deleteNote(n.id)">✕</el-button>
+                        </div>
+                    </div>
+                </el-tab-pane>
+                <el-tab-pane label="图片档案" name="images">
+                    <div v-if="!archiveImages.length" style="text-align:center;padding:40px;color:#ccc">暂无图片</div>
+                    <div v-else style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:50vh;overflow-y:auto">
+                        <el-image v-for="(img, idx) in archiveImages" :key="img.id" :src="img.fileUrl" fit="cover" style="height:150px;border-radius:6px" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
+                    </div>
+                </el-tab-pane>
+                <el-tab-pane label="附件资料" name="files">
+                    <el-table :data="archiveFiles" max-height="50vh">
+                        <el-table-column prop="fileName" label="文件名" />
+                        <el-table-column prop="mediaType" label="文件类型" width="100" />
+                        <el-table-column prop="createTime" label="上传时间" width="160" />
+                    </el-table>
+                </el-tab-pane>
+                <el-tab-pane label="关联文物" name="artifacts">
+                    <el-empty description="暂无关联文物" />
+                </el-tab-pane>
+            </el-tabs>
+            <el-button size="small" type="primary" @click="showAddDialog = true" style="margin-top:14px">新增</el-button>
+            </div>
         </div>
+    </el-dialog>
+
+    <!-- 新增内容对话框 -->
+    <el-dialog v-model="showAddDialog" title="新增内容" width="500px">
+        <el-radio-group v-model="addType" style="margin-bottom:12px">
+            <el-radio-button value="note">工作记录</el-radio-button>
+            <el-radio-button value="image">图片档案</el-radio-button>
+            <el-radio-button value="file">附件资料</el-radio-button>
+            <el-radio-button value="artifact">关联文物</el-radio-button>
+        </el-radio-group>
+        <template v-if="addType === 'note'">
+            <el-form-item label="时间"><el-date-picker v-model="addForm2.date" type="datetime" placeholder="选择时间" value-format="YYYY-MM-DD HH:mm:ss" style="width:100%" /></el-form-item>
+            <el-form-item label="内容"><el-input v-model="addForm2.content" type="textarea" :rows="4" placeholder="请输入工作描述" /></el-form-item>
+        </template>
+        <template v-else-if="addType === 'image' || addType === 'file'">
+            <el-upload class="upload-demo" action="/api/upload" name="file"
+                :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true"
+                :on-success="(res) => { addForm2.fileUrl = res.data; addForm2.fileName = res.data?.split('/').pop() || '' }"
+                :before-upload="(file) => { addForm2.fileName = file.name; return true }"
+                :accept="addType === 'image' ? 'image/*' : '.pdf,.doc,.docx,.xls,.xlsx,.dwg,.zip,.rar'">
+                <el-button type="primary">选择文件</el-button>
+            </el-upload>
+            <el-form-item v-if="addForm2.fileName" label="文件名"><span style="font-size:13px">{{ addForm2.fileName }}</span></el-form-item>
+        </template>
+        <template v-else>
+            <el-form-item label="文物编号"><el-input v-model="addForm2.artifactCode" placeholder="输入文物编号检索" /></el-form-item>
+            <el-button size="small" type="primary">检索并添加</el-button>
+        </template>
+        <template #footer><el-button @click="showAddDialog = false">取消</el-button><el-button type="primary" @click="submitAddContent">确定</el-button></template>
     </el-dialog>
 </template>
 
 <style scoped>
 .workflow-page { padding: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.stats-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; flex-shrink: 0; }
-.stat-card { flex: 1; min-width: 100px; text-align: center; border: 1px solid #E5E6EB; border-radius: 8px; }
-.sv { font-size: 24px; font-weight: 700; color: #1D2129; }
-.sl { font-size: 11px; color: #999; margin-top: 2px; }
+.burial-selector { padding-bottom: 12px; border-bottom: 1px solid #E5E6EB; margin-bottom: 12px; }
 .three-col { display: flex; gap: 12px; flex: 1; min-height: 0; }
 .col-left { flex: 0 0 220px; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
 .flow-tree { padding: 4px 0; }

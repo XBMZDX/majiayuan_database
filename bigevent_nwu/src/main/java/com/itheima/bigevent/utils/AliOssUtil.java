@@ -20,8 +20,11 @@ public class AliOssUtil
      public static String uploadFile(String objectName,InputStream in) throws Exception
     {
         
-       // 从环境变量中获取访问凭证。运行本代码示例之前，请确保已设置环境变量OSS_ACCESS_KEY_ID和OSS_ACCESS_KEY_SECRET。
-          EnvironmentVariableCredentialsProvider credentialsProvider = CredentialsProviderFactory.newEnvironmentVariableCredentialsProvider();
+       // 从 application.yml 的 oss.access-key-id / oss.access-key-secret 读取
+        String ak = OSSConfig.getAccessKeyId();
+        String sk = OSSConfig.getAccessKeySecret();
+        com.aliyun.oss.common.auth.DefaultCredentialProvider credentialsProvider =
+            new com.aliyun.oss.common.auth.DefaultCredentialProvider(ak, sk);
         // 填写Object完整路径，完整路径中不能包含Bucket名称，例如exampledir/exampleobject.txt。
         //String objectName = "001.png";
         // 创建OSSClient实例。
@@ -39,14 +42,11 @@ public class AliOssUtil
             // 填写字符串。
             String content = "Hello OSS，你好世界";
 
-            // 创建PutObjectRequest对象。
+            // 创建PutObjectRequest对象，设置公开读权限
             PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, objectName, in);
-
-            // 如果需要上传时设置存储类型和访问权限，请参考以下示例代码。
-            // ObjectMetadata metadata = new ObjectMetadata();
-            // metadata.setHeader(OSSHeaders.OSS_STORAGE_CLASS, StorageClass.Standard.toString());
-            // metadata.setObjectAcl(CannedAccessControlList.Private);
-            // putObjectRequest.setMetadata(metadata);
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setObjectAcl(CannedAccessControlList.PublicRead);
+            putObjectRequest.setMetadata(metadata);
            
             // 上传字符串。
             PutObjectResult result = ossClient.putObject(putObjectRequest); 

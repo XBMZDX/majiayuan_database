@@ -17,29 +17,39 @@ public class WorkflowController {
 
     // ========== 流程树 ==========
     @GetMapping("/tree")
-    public Result<List<Map<String,Object>>> getTree() { return Result.success(treeMapper.list()); }
+    public Result<List<Map<String,Object>>> getTree(@RequestParam(required = false) Integer burialId) {
+        return Result.success(treeMapper.listByBurial(burialId));
+    }
 
     @PutMapping("/tree")
-    public Result saveTree(@RequestBody List<Map<String,Object>> nodes) {
-        treeMapper.deleteAll();
+    public Result saveTree(@RequestBody Map<String,Object> body) {
+        int burialId = Integer.parseInt(body.get("burialId").toString());
+        List<Map<String,Object>> nodes = (List<Map<String,Object>>) body.get("nodes");
+        treeMapper.deleteByBurial(burialId);
         for (int i = 0; i < nodes.size(); i++) {
-            treeMapper.insert(nodes.get(i).get("label").toString(), i + 1);
+            treeMapper.insert(burialId, nodes.get(i).get("label").toString(), i + 1);
         }
         return Result.success();
     }
 
     // ========== 时间轴 ==========
     @GetMapping("/timeline")
-    public Result<List<Map<String,Object>>> getTimeline() { return Result.success(timelineMapper.list()); }
+    public Result<List<Map<String,Object>>> getTimeline(@RequestParam(required = false) Integer burialId) {
+        return Result.success(timelineMapper.listByBurial(burialId));
+    }
 
     @PutMapping("/timeline")
-    public Result saveTimeline(@RequestBody List<Map<String,Object>> items) {
-        timelineMapper.deleteAll();
+    public Result saveTimeline(@RequestBody Map<String,Object> body) {
+        int burialId = Integer.parseInt(body.get("burialId").toString());
+        List<Map<String,Object>> items = (List<Map<String,Object>>) body.get("items");
+        timelineMapper.deleteByBurial(burialId);
         for (Map<String,Object> item : items) {
             timelineMapper.insert(
+                burialId,
                 Integer.parseInt(item.get("flowId").toString()),
                 item.get("date") != null ? item.get("date").toString() : null,
-                item.get("title") != null ? item.get("title").toString() : ""
+                item.get("title") != null ? item.get("title").toString() : "",
+                item.get("status") != null ? item.get("status").toString() : "pending"
             );
         }
         return Result.success();
@@ -47,19 +57,19 @@ public class WorkflowController {
 
     // 内联 Mapper
     @Mapper interface WorkflowTreeMapper {
-        @Select("SELECT id, label FROM workflow_tree ORDER BY sort_order")
-        List<Map<String,Object>> list();
-        @Delete("DELETE FROM workflow_tree") void deleteAll();
-        @Insert("INSERT INTO workflow_tree (label, sort_order) VALUES (#{label}, #{order})")
-        void insert(String label, int order);
+        @Select("SELECT id, label FROM workflow_tree WHERE burial_id = #{burialId} ORDER BY sort_order")
+        List<Map<String,Object>> listByBurial(Integer burialId);
+        @Delete("DELETE FROM workflow_tree WHERE burial_id = #{burialId}") void deleteByBurial(int burialId);
+        @Insert("INSERT INTO workflow_tree (burial_id, label, sort_order) VALUES (#{burialId}, #{label}, #{order})")
+        void insert(int burialId, String label, int order);
     }
 
     @Mapper interface WorkflowTimelineMapper {
-        @Select("SELECT id, flow_id AS flowId, event_date AS date, title FROM workflow_timeline ORDER BY event_date")
-        List<Map<String,Object>> list();
-        @Delete("DELETE FROM workflow_timeline") void deleteAll();
-        @Insert("INSERT INTO workflow_timeline (flow_id, event_date, title) VALUES (#{flowId}, #{date}, #{title})")
-        void insert(int flowId, String date, String title);
+        @Select("SELECT id, flow_id AS flowId, event_date AS date, title, status FROM workflow_timeline WHERE burial_id = #{burialId} ORDER BY event_date")
+        List<Map<String,Object>> listByBurial(Integer burialId);
+        @Delete("DELETE FROM workflow_timeline WHERE burial_id = #{burialId}") void deleteByBurial(int burialId);
+        @Insert("INSERT INTO workflow_timeline (burial_id, flow_id, event_date, title, status) VALUES (#{burialId}, #{flowId}, #{date}, #{title}, #{status})")
+        void insert(int burialId, int flowId, String date, String title, String status);
     }
 
     // ========== 备注 ==========
