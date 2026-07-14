@@ -6,18 +6,23 @@ import { useTokenStore } from '@/stores/token.js'
 const token = computed(() => useTokenStore().token)
 
 // ========== 墓葬下拉选择 ==========
-const burialList = ref([])
+const allBurials = ref([])
+const burialList = computed(() => allBurials.value.filter(b => b.hasCoffin && b.coffinCount > 0))
 const selectedBurialId = ref(null)
-const fetchBurialList = async () => { const res = await request.get('/admin/burial/list/simple'); burialList.value = (res.data || []).filter(b => b.hasCoffin && b.coffinCount > 0) }
-// ========== 棺下拉选择 ==========
-const coffinList = ref([])
-const selectedCoffinId = ref(null)
+const selectedBurial = computed(() => allBurials.value.find(b => b.id === selectedBurialId.value))
+const coffinCount = computed(() => selectedBurial.value?.coffinCount || 0)
+const fetchBurialList = async () => { const res = await request.get('/admin/burial/list/simple'); allBurials.value = res.data || [] }
+// ========== 棺选择 ==========
+const coffinList = ref([])          // 从 coffin 表加载的实际记录
+const selectedCoffinIndex = ref(1)  // 1=棺1, 2=棺2...
+const coffinOptions = computed(() => Array.from({length: coffinCount.value}, (_, i) => ({label: '棺' + (i+1), value: i+1})))
+const selectedCoffinId = computed(() => coffinList.value[selectedCoffinIndex.value - 1]?.id || null)
 const fetchCoffinList = async () => { if (!selectedBurialId.value) { coffinList.value = []; return }; const res = await request.get('/admin/coffin/by-burial/' + selectedBurialId.value); coffinList.value = res.data || [] }
 // ========== 流程树（左侧）—— 从 API 加载 ==========
 const treeData = ref([])
 
-const fetchTree = async () => { if (!selectedCoffinId.value) return; const res = await request.get('/admin/coffin-workflow/tree', {params:{coffinId:selectedCoffinId.value}}); treeData.value = (res.data || []).map(t => ({ id: t.id, label: t.label })) }
-const saveTreeToDB = async () => { if (!selectedCoffinId.value) return; await request.put('/admin/coffin-workflow/tree', { coffinId: selectedCoffinId.value, nodes: treeData.value }) }
+const fetchTree = async () => { const cid = selectedCoffinId.value; if (!cid) return; const res = await request.get('/admin/coffin-workflow/tree', {params:{coffinId:cid}}); treeData.value = (res.data || []).map(t => ({ id: t.id, label: t.label })) }
+const saveTreeToDB = async () => { const cid = selectedCoffinId.value; if (!cid) return; await request.put('/admin/coffin-workflow/tree', { coffinId: cid, nodes: treeData.value }) }
 
 const selectedNode = ref(null)
 const onNodeClick = (node) => { selectedNode.value = selectedNode.value?.id === node.id ? null : node }
@@ -93,7 +98,7 @@ const saveDialog = () => {
     const newIds = new Set(dialogNodes.value.map(n => n.id))
     timelineData.value = timelineData.value.filter(e => newIds.has(e.flowId))
     treeData.value = dialogNodes.value.map(n => ({ ...n })); editDialogVisible.value = false; selectedNode.value = null
-    saveTreeToDB(); request.put('/admin/coffin-workflow/timeline', { coffinId: selectedCoffinId.value, items: timelineData.value })
+    saveTreeToDB(); (selectedCoffinId.value ? request.put('/admin/coffin-workflow/timeline', { coffinId: selectedCoffinId.value, items: timelineData.value }) : Promise.resolve())
 }
 const cancelDialog = () => { editDialogVisible.value = false }
 
@@ -117,7 +122,7 @@ const saveTimeline = () => {
     dialogTimeline.value.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     timelineData.value = [...dialogTimeline.value.map(t => ({ ...t }))]; timelineEditVisible.value = false; selectedEvent.value = null
     // 保存到数据库
-    request.put('/admin/coffin-workflow/timeline', { coffinId: selectedCoffinId.value, items: timelineData.value })
+    (selectedCoffinId.value ? request.put('/admin/coffin-workflow/timeline', { coffinId: selectedCoffinId.value, items: timelineData.value }) : Promise.resolve())
 }
 
 // ========== 时间轴（中间）—— 从 API 加载 ==========
@@ -129,14 +134,16 @@ const selectedBurialName = computed(() => {
     return b ? ((b.burialNo||'') + (b.name && b.name !== b.burialNo ? ' ' + b.name : '')) : '未选择'
 })
 const selectedCoffinName = computed(() => {
-    const c = coffinList.value.find(c => c.id === selectedCoffinId.value)
-    return c ? ((c.coffinNo||'') + (c.material ? ' ' + c.material : '')) : '未选择'
+    if (!coffinList.value.length) return '未选择'
+    const idx = selectedCoffinIndex.value - 1
+    const c = coffinList.value[idx]
+    return c ? ((c.coffinNo||'') + (c.material ? ' ' + c.material : '')) : '棺' + selectedCoffinIndex.value
 })
 
-const onBurialChange = () => { fetchCoffinList(); selectedCoffinId.value = null; treeData.value = []; timelineData.value = [] }
+const onBurialChange = async () => { await fetchCoffinList(); selectedCoffinIndex.value = 1; treeData.value = []; timelineData.value = []; fetchTree(); fetchTimeline() }
 const onCoffinChange = () => { fetchTree(); fetchTimeline() }
 
-onMounted(async () => { await fetchBurialList(); if (burialList.value.length > 0) { selectedBurialId.value = burialList.value[0].id; fetchCoffinList() } })
+onMounted(async () => { await fetchBurialList(); if (burialList.value.length > 0) { selectedBurialId.value = burialList.value[0].id; await fetchCoffinList(); fetchTree(); fetchTimeline() } })
 
 const selectedEvent = ref(null)
 const fullArchiveVisible = ref(false)
@@ -288,9 +295,10 @@ const detailData = computed(() => {
             <el-select v-model="selectedBurialId" placeholder="请选择墓葬" style="width:260px" size="large" @change="onBurialChange">
                 <el-option v-for="b in burialList" :key="b.id" :label="(b.burialNo||'') + (b.name && b.name !== b.burialNo ? ' ' + b.name : '')" :value="b.id" />
             </el-select>
-            <el-select v-model="selectedCoffinId" placeholder="请选择棺" style="width:200px" size="large" @change="onCoffinChange" :disabled="!coffinList.length">
-                <el-option v-for="c in coffinList" :key="c.id" :label="(c.coffinNo||'棺' + c.id) + (c.material ? ' (' + c.material + ')' : '')" :value="c.id" />
+            <el-select v-if="coffinCount >= 2" v-model="selectedCoffinIndex" placeholder="请选择棺" style="width:100px" size="large" @change="onCoffinChange">
+                <el-option v-for="c in coffinOptions" :key="c.value" :label="c.label" :value="c.value" />
             </el-select>
+            <span v-if="coffinCount === 1" style="font-size:14px;color:#1D2129;white-space:nowrap">棺1</span>
         </div>
 
         <!-- 三栏主体 -->

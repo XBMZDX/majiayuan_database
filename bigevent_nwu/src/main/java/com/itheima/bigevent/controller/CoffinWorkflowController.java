@@ -23,8 +23,11 @@ public class CoffinWorkflowController {
 
     @PutMapping("/tree")
     public Result saveTree(@RequestBody Map<String,Object> body) {
-        int coffinId = Integer.parseInt(body.get("coffinId").toString());
+        Object cidObj = body.get("coffinId");
+        if (cidObj == null) return Result.success();
+        int coffinId = Integer.parseInt(cidObj.toString());
         List<Map<String,Object>> nodes = (List<Map<String,Object>>) body.get("nodes");
+        if (nodes == null) return Result.success();
         treeMapper.deleteByCoffin(coffinId);
         for (int i = 0; i < nodes.size(); i++) {
             treeMapper.insert(coffinId, nodes.get(i).get("label").toString(), i + 1);
@@ -40,13 +43,16 @@ public class CoffinWorkflowController {
 
     @PutMapping("/timeline")
     public Result saveTimeline(@RequestBody Map<String,Object> body) {
-        int coffinId = Integer.parseInt(body.get("coffinId").toString());
+        Object cidObj = body.get("coffinId");
+        if (cidObj == null) return Result.success();
+        int coffinId = Integer.parseInt(cidObj.toString());
         List<Map<String,Object>> items = (List<Map<String,Object>>) body.get("items");
+        if (items == null) return Result.success();
         timelineMapper.deleteByCoffin(coffinId);
         for (Map<String,Object> item : items) {
             timelineMapper.insert(
                 coffinId,
-                Integer.parseInt(item.get("flowId").toString()),
+                item.get("flowId") != null ? Integer.parseInt(item.get("flowId").toString()) : 0,
                 item.get("date") != null ? item.get("date").toString() : null,
                 item.get("title") != null ? item.get("title").toString() : "",
                 item.get("status") != null ? item.get("status").toString() : "pending"
