@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Edit } from '@element-plus/icons-vue'
+import { Edit, Delete, Document, PictureFilled, VideoCameraFilled, Headset, FolderOpened, Files } from '@element-plus/icons-vue'
 import request from '@/utils/request.js'
 import { useTokenStore } from '@/stores/token.js'
 const token = computed(() => useTokenStore().token)
@@ -158,6 +158,7 @@ const submitAddContent = async () => {
 }
 
 const archiveTab = ref('notes')
+const deleteMode = ref(false)
 const archiveNotes = ref([])
 const archiveImages = ref([])
 const archiveFiles = ref([])
@@ -184,7 +185,74 @@ const addNote = async () => {
     await request.post('/admin/workflow/note', { timelineId: selectedEvent.value.id, ...newNote.value })
     newNote.value = { noteType: '', content: '' }; loadArchiveData(selectedEvent.value.id)
 }
+const getNoteTime = (n) => { const m = (n.content || '').match(/^\[(.+?)\]/); return m ? m[1] : n.createTime }
+const getNoteContent = (n) => (n.content || '').replace(/^\[.+?\]\s*/, '')
 const deleteNote = async (id) => { await request.delete('/admin/workflow/note/' + id); loadArchiveData(selectedEvent.value?.id) }
+const deleteMedia = async (id) => { await request.delete('/admin/workflow/media/' + id); loadArchiveData(selectedEvent.value?.id) }
+
+// ========== 文件预览 ==========
+const iconMap = { Document, PictureFilled, VideoCameraFilled, Headset, FolderOpened, Files }
+const previewVisible = ref(false)
+const previewFile = ref(null)
+
+const getFileExt = (fileName) => (fileName || '').split('.').pop()?.toLowerCase() || ''
+
+const getFileIcon = (ext) => {
+    const m = {
+        pdf:    { icon: iconMap.Document,          color: '#E74C3C' },
+        doc:    { icon: iconMap.Document,          color: '#2980B9' },
+        docx:   { icon: iconMap.Document,          color: '#2980B9' },
+        xls:    { icon: iconMap.Document,          color: '#27AE60' },
+        xlsx:   { icon: iconMap.Document,          color: '#27AE60' },
+        ppt:    { icon: iconMap.Document,          color: '#E67E22' },
+        pptx:   { icon: iconMap.Document,          color: '#E67E22' },
+        jpg:    { icon: iconMap.PictureFilled,     color: '#E67E22' },
+        jpeg:   { icon: iconMap.PictureFilled,     color: '#E67E22' },
+        png:    { icon: iconMap.PictureFilled,     color: '#E67E22' },
+        gif:    { icon: iconMap.PictureFilled,     color: '#E67E22' },
+        bmp:    { icon: iconMap.PictureFilled,     color: '#E67E22' },
+        mp4:    { icon: iconMap.VideoCameraFilled, color: '#8E44AD' },
+        webm:   { icon: iconMap.VideoCameraFilled, color: '#8E44AD' },
+        avi:    { icon: iconMap.VideoCameraFilled, color: '#8E44AD' },
+        mov:    { icon: iconMap.VideoCameraFilled, color: '#8E44AD' },
+        mp3:    { icon: iconMap.Headset,           color: '#16A085' },
+        wav:    { icon: iconMap.Headset,           color: '#16A085' },
+        flac:   { icon: iconMap.Headset,           color: '#16A085' },
+        aac:    { icon: iconMap.Headset,           color: '#16A085' },
+        zip:    { icon: iconMap.FolderOpened,      color: '#7F8C8D' },
+        rar:    { icon: iconMap.FolderOpened,      color: '#7F8C8D' },
+        '7z':   { icon: iconMap.FolderOpened,      color: '#7F8C8D' },
+        dwg:    { icon: iconMap.Files,             color: '#C0392B' },
+        dxf:    { icon: iconMap.Files,             color: '#C0392B' },
+    }
+    return m[ext] || { icon: iconMap.Files, color: '#95A5A6' }
+}
+
+const getPreviewType = (fileName) => {
+    const ext = getFileExt(fileName)
+    if (['pdf','doc','docx','xls','xlsx','ppt','pptx'].includes(ext)) return 'browser'
+    if (['mp4','webm','avi','mov'].includes(ext)) return 'video'
+    if (['mp3','wav','flac','aac'].includes(ext)) return 'audio'
+    if (['jpg','jpeg','png','gif','bmp'].includes(ext)) return 'image'
+    return 'unsupported'
+}
+
+const openPreview = (file) => {
+    previewFile.value = file
+    const type = getPreviewType(file.fileName)
+    if (type === 'browser') { window.open(file.fileUrl, '_blank'); return }
+    if (type === 'image') { window.open(file.fileUrl, '_blank'); return }
+    previewVisible.value = true
+}
+
+const downloadFile = (file) => {
+    const a = document.createElement('a')
+    a.href = file.fileUrl
+    a.download = file.fileName || ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+}
 
 // 判断某流程是否有时间节点
 const hasTimelineEvents = (flowId) => timelineData.value.some(e => e.flowId === flowId)
@@ -287,17 +355,17 @@ const detailData = computed(() => {
                         <div class="section-title">最新工作记录<span class="section-more">查看更多 →</span></div>
                         <div v-if="!archiveNotes.length" class="note-card"><div style="color:#ccc;text-align:center;font-size:12px">暂无记录</div></div>
                         <div v-for="n in archiveNotes.slice(0,3)" :key="n.id" class="note-card" style="margin-bottom:6px">
-                            <div class="note-time">{{ n.createTime }}</div>
-                            <div class="note-content">{{ n.content }}</div>
+                            <div class="note-time">{{ getNoteTime(n) }}</div>
+                            <div class="note-content">{{ getNoteContent(n) }}</div>
                         </div>
                     </div>
 
                     <!-- ③ 最近图片 -->
                     <div class="detail-section">
                         <div class="section-title">最近图片</div>
-                        <el-empty v-if="false" description="暂无图片" :image-size="40" />
+                        <el-empty v-if="!archiveImages.length" description="暂无图片" :image-size="40" />
                         <div v-else class="image-grid">
-                            <el-image v-for="i in 4" :key="i" src="" fallback-src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='60'><rect fill='%23E5E6EB' width='80' height='60' rx='4'/><text x='40' y='35' text-anchor='middle' fill='%23C0C4CC' font-size='10'>暂无</text></svg>" class="thumb-img" preview-teleported :preview-src-list="[]" />
+                            <el-image v-for="(img, idx) in archiveImages.slice(0,4)" :key="img.id" :src="img.fileUrl" fit="cover" class="thumb-img" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
                         </div>
                     </div>
 
@@ -357,10 +425,10 @@ const detailData = computed(() => {
     </el-dialog>
 
     <!-- 完整档案对话框 -->
-    <el-dialog v-model="fullArchiveVisible" title="节点档案" width="80%" top="10vh" :close-on-click-modal="false" @opened="loadArchiveData(selectedEvent?.id)">
-        <div v-if="detailData" style="height:70vh;display:flex;flex-direction:column">
+    <el-dialog v-model="fullArchiveVisible" title="节点档案" width="80%" top="5vh" :close-on-click-modal="false" @opened="loadArchiveData(selectedEvent?.id)" @closed="deleteMode = false">
+        <div v-if="detailData" class="archive-dialog">
             <!-- 顶部固定信息 -->
-            <el-descriptions :column="3" border size="small" style="flex-shrink:0;margin-bottom:16px">
+            <el-descriptions :column="3" border size="small" class="archive-header">
                 <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
                 <el-descriptions-item label="所属流程">{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="所属墓葬">{{ selectedBurialName }}</el-descriptions-item>
@@ -369,46 +437,90 @@ const detailData = computed(() => {
                     <el-tag :type="detailData.status==='done'?'success':detailData.status==='doing'?'warning':'info'" size="small">{{ detailData.status==='done'?'已完成':detailData.status==='doing'?'进行中':'未开始' }}</el-tag>
                 </el-descriptions-item>
             </el-descriptions>
-            <!-- Tabs -->
-            <div style="display:flex;align-items:flex-start">
-            <el-tabs v-model="archiveTab" style="flex:1">
+            <!-- 固定：工具栏 -->
+            <div class="archive-toolbar">
+                <el-button size="small" type="primary" @click="showAddDialog = true">新增</el-button>
+                <el-button size="small" :type="deleteMode ? 'danger' : 'default'" :icon="Delete" @click="deleteMode = !deleteMode">{{ deleteMode ? '取消' : '删除' }}</el-button>
+            </div>
+            <!-- Tabs 填充区 -->
+            <el-tabs v-model="archiveTab" class="archive-tabs" @tab-change="deleteMode = false">
                 <el-tab-pane label="工作记录" name="notes">
-                    <div style="max-height:50vh;overflow-y:auto">
+                    <div class="tab-scroll">
                         <div v-for="n in archiveNotes" :key="n.id" style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #F0F0F0">
-                            <div style="flex:1"><div style="font-size:12px;color:#999">{{ n.createTime }}</div><div style="font-weight:600;margin:4px 0">{{ n.noteType }}</div><div style="font-size:13px;color:#4E5969">{{ n.content }}</div></div>
+                            <div style="flex:1"><div style="font-size:12px;color:#999">{{ getNoteTime(n) }}</div><div style="font-weight:600;margin:4px 0">{{ n.noteType }}</div><div style="font-size:13px;color:#4E5969">{{ getNoteContent(n) }}</div></div>
                             <el-button size="small" type="danger" circle @click="deleteNote(n.id)">✕</el-button>
                         </div>
                     </div>
                 </el-tab-pane>
                 <el-tab-pane label="图片档案" name="images">
+                    <div class="tab-scroll">
                     <div v-if="!archiveImages.length" style="text-align:center;padding:40px;color:#ccc">暂无图片</div>
-                    <div v-else style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:50vh;overflow-y:auto">
-                        <el-image v-for="(img, idx) in archiveImages" :key="img.id" :src="img.fileUrl" fit="cover" style="height:150px;border-radius:6px" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
+                    <div v-else class="archive-image-grid">
+                        <div v-for="(img, idx) in archiveImages" :key="img.id" style="position:relative">
+                            <el-image :src="img.fileUrl" fit="cover" style="height:150px;border-radius:6px;width:100%" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
+                            <el-button v-if="deleteMode" size="small" type="danger" circle style="position:absolute;top:4px;right:4px;z-index:1" @click="deleteMedia(img.id)">✕</el-button>
+                        </div>
+                    </div>
                     </div>
                 </el-tab-pane>
                 <el-tab-pane label="附件资料" name="files">
-                    <el-table :data="archiveFiles" max-height="50vh">
-                        <el-table-column prop="fileName" label="文件名" />
-                        <el-table-column prop="mediaType" label="文件类型" width="100" />
-                        <el-table-column prop="createTime" label="上传时间" width="160" />
+                    <div class="tab-scroll table-wrapper">
+                        <el-table :data="archiveFiles">
+                        <el-table-column label="文件名">
+                            <template #default="{row}">
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <el-icon :size="16" :color="getFileIcon(getFileExt(row.fileName)).color"><component :is="getFileIcon(getFileExt(row.fileName)).icon" /></el-icon>
+                                    <el-link type="primary" :underline="false" class="file-link" @click="openPreview(row)">{{ row.fileName }}</el-link>
+                                </div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="mediaType" label="文件类型" />
+                        <el-table-column prop="createTime" label="上传时间" />
+                        <el-table-column v-if="deleteMode" label="操作">
+                            <template #default="{row}">
+                                <el-button size="small" type="danger" circle @click="deleteMedia(row.id)">✕</el-button>
+                            </template>
+                        </el-table-column>
                     </el-table>
-                </el-tab-pane>
-                <el-tab-pane label="关联文物" name="artifacts">
-                    <el-empty description="暂无关联文物" />
+                    </div>
                 </el-tab-pane>
             </el-tabs>
-            <el-button size="small" type="primary" @click="showAddDialog = true" style="margin-top:14px">新增</el-button>
-            </div>
         </div>
     </el-dialog>
 
+
+    <!-- 文件预览对话框 -->
+    <el-dialog v-model="previewVisible" :title="previewFile?.fileName || '文件预览'" width="700px" top="5vh" @closed="previewFile = null">
+        <template v-if="previewFile">
+            <!-- 视频播放 -->
+            <div v-if="getPreviewType(previewFile.fileName) === 'video'" style="text-align:center">
+                <video :src="previewFile.fileUrl" controls autoplay style="max-width:100%;max-height:60vh;border-radius:6px">您的浏览器不支持视频播放</video>
+            </div>
+            <!-- 音频播放 -->
+            <div v-else-if="getPreviewType(previewFile.fileName) === 'audio'" style="text-align:center;padding:30px 0">
+                <div style="margin-bottom:20px">
+                    <el-icon :size="56" color="#16A085"><Headset /></el-icon>
+                </div>
+                <audio :src="previewFile.fileUrl" controls autoplay style="width:100%;max-width:500px">您的浏览器不支持音频播放</audio>
+            </div>
+            <!-- 不支持预览 -->
+            <div v-else style="text-align:center;padding:40px 0">
+                <el-icon :size="56" color="#C0C4CC"><Files /></el-icon>
+                <p style="color:#909399;margin:16px 0;font-size:14px">该文件类型暂不支持在线预览，请下载后查看。</p>
+                <el-button type="primary" @click="downloadFile(previewFile)">下载文件</el-button>
+            </div>
+        </template>
+        <template #footer>
+            <el-button @click="previewVisible = false">关闭</el-button>
+            <el-button v-if="previewFile && getPreviewType(previewFile.fileName) !== 'unsupported'" type="primary" @click="downloadFile(previewFile)">下载</el-button>
+        </template>
+    </el-dialog>
     <!-- 新增内容对话框 -->
     <el-dialog v-model="showAddDialog" title="新增内容" width="500px">
         <el-radio-group v-model="addType" style="margin-bottom:12px">
             <el-radio-button value="note">工作记录</el-radio-button>
             <el-radio-button value="image">图片档案</el-radio-button>
             <el-radio-button value="file">附件资料</el-radio-button>
-            <el-radio-button value="artifact">关联文物</el-radio-button>
         </el-radio-group>
         <template v-if="addType === 'note'">
             <el-form-item label="时间"><el-date-picker v-model="addForm2.date" type="datetime" placeholder="选择时间" value-format="YYYY-MM-DD HH:mm:ss" style="width:100%" /></el-form-item>
@@ -417,16 +529,12 @@ const detailData = computed(() => {
         <template v-else-if="addType === 'image' || addType === 'file'">
             <el-upload class="upload-demo" action="/api/upload" name="file"
                 :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true"
-                :on-success="(res) => { addForm2.fileUrl = res.data; addForm2.fileName = res.data?.split('/').pop() || '' }"
+                :on-success="(res) => { addForm2.fileUrl = res.data }"
                 :before-upload="(file) => { addForm2.fileName = file.name; return true }"
                 :accept="addType === 'image' ? 'image/*' : '.pdf,.doc,.docx,.xls,.xlsx,.dwg,.zip,.rar'">
                 <el-button type="primary">选择文件</el-button>
             </el-upload>
             <el-form-item v-if="addForm2.fileName" label="文件名"><span style="font-size:13px">{{ addForm2.fileName }}</span></el-form-item>
-        </template>
-        <template v-else>
-            <el-form-item label="文物编号"><el-input v-model="addForm2.artifactCode" placeholder="输入文物编号检索" /></el-form-item>
-            <el-button size="small" type="primary">检索并添加</el-button>
         </template>
         <template #footer><el-button @click="showAddDialog = false">取消</el-button><el-button type="primary" @click="submitAddContent">确定</el-button></template>
     </el-dialog>
@@ -477,4 +585,18 @@ const detailData = computed(() => {
 .thumb-img { width: 100%; height: 60px; border-radius: 4px; object-fit: cover; cursor: pointer; }
 .detail-footer { font-size: 12px; color: #909399; text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #F0F0F0; }
 .detail-empty { text-align: center; padding: 60px 0; color: #ccc; font-size: 13px; }
+
+/* ========== 完整档案对话框 ========== */
+.archive-dialog { height: 75vh; display: flex; flex-direction: column; overflow: hidden; }
+.archive-header { flex-shrink: 0; margin-bottom: 12px; }
+.archive-toolbar { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.archive-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.archive-tabs :deep(.el-tabs__header) { flex-shrink: 0; margin-bottom: 8px; }
+.archive-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: hidden; }
+.archive-tabs :deep(.el-tab-pane) { height: 100%; }
+.tab-scroll { height: 100%; overflow-y: auto; }
+.table-wrapper { width: 100%; overflow-x: auto; }
+.archive-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.file-link { cursor: pointer; }
+.file-link:hover { opacity: 0.8; text-decoration: underline; }
 </style>
