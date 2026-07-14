@@ -306,3 +306,65 @@ CREATE TABLE IF NOT EXISTS coffin_workflow_media (
     description VARCHAR(500)  COMMENT '描述',
     create_time DATETIME      DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='棺工作流媒体文件';
+
+-- ============================================
+-- 8. 车工作流程模块
+-- ============================================
+
+-- 8.1 流程树
+CREATE TABLE IF NOT EXISTS chariot_workflow_tree (
+    id            INT          PRIMARY KEY AUTO_INCREMENT,
+    burial_id     INT          NOT NULL COMMENT '所属墓葬ID',
+    chariot_index INT          NOT NULL DEFAULT 1 COMMENT '车序号（1=车1, 2=车2...）',
+    label         VARCHAR(255) COMMENT '流程名称',
+    sort_order    INT          COMMENT '排序'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='车工作流程树';
+
+-- 8.2 时间轴
+CREATE TABLE IF NOT EXISTS chariot_workflow_timeline (
+    id            INT          PRIMARY KEY AUTO_INCREMENT,
+    burial_id     INT          NOT NULL COMMENT '所属墓葬ID',
+    chariot_index INT          NOT NULL DEFAULT 1 COMMENT '车序号',
+    flow_id       INT          COMMENT '所属流程ID',
+    event_date    DATE         COMMENT '日期',
+    title         VARCHAR(255) COMMENT '标题',
+    status        VARCHAR(50)  DEFAULT 'pending' COMMENT '状态: done/doing/pending'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='车工作流时间轴';
+
+-- 8.3 工作记录（备注）
+CREATE TABLE IF NOT EXISTS chariot_workflow_note (
+    id          INT         PRIMARY KEY AUTO_INCREMENT,
+    timeline_id INT         NOT NULL COMMENT '所属时间轴ID',
+    note_type   VARCHAR(50) COMMENT '备注类型',
+    content     TEXT        COMMENT '内容',
+    create_time DATETIME    DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='车工作流备注';
+
+-- 8.4 媒体文件
+CREATE TABLE IF NOT EXISTS chariot_workflow_media (
+    id          INT           PRIMARY KEY AUTO_INCREMENT,
+    timeline_id INT           NOT NULL COMMENT '所属时间轴ID',
+    media_type  VARCHAR(50)   COMMENT '媒体类型',
+    file_name   VARCHAR(255)  COMMENT '文件名',
+    file_url    VARCHAR(500)  COMMENT '文件URL',
+    description VARCHAR(500)  COMMENT '描述',
+    create_time DATETIME      DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='车工作流媒体文件';
+
+-- ============================================
+-- 9. 仪器分析模块
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS lab_instruments (
+    id          INT          PRIMARY KEY AUTO_INCREMENT,
+    name        VARCHAR(200) NOT NULL COMMENT '实验名字',
+    image       VARCHAR(500) COMMENT '实验图片URL',
+    scope       VARCHAR(500) COMMENT '实验范围',
+    location    VARCHAR(200) COMMENT '实验地点',
+    model       TEXT         COMMENT '仪器型号',
+    conditions  TEXT         COMMENT '实验条件',
+    method      VARCHAR(500) COMMENT '实验方法文档URL',
+    method_name VARCHAR(200) COMMENT '实验方法文档名',
+    create_time DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME     DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仪器分析表';

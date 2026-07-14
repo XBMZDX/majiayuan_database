@@ -17,10 +17,10 @@ import Restoration from '@/views/article/Restoration.vue'
 import DigitalLibrary from '@/views/article/DigitalLibrary.vue'
 import DigitalArchive from '@/views/article/DigitalArchive.vue'
 import AiChat from '@/views/article/AiChat.vue'
+import LabInstruments from '@/views/article/LabInstruments.vue'
 import DetectionOverview from '@/views/article/DetectionOverview.vue'
 import DetectionResult from '@/views/article/DetectionResult.vue'
 import DetectionReport from '@/views/article/DetectionReport.vue'
-import DetectionImage from '@/views/article/DetectionImage.vue'
 import UserAvatarVue from '@/views/user/UserAvatar.vue'
 import UserInfoVue from '@/views/user/UserInfo.vue'
 import UserResetPasswordVue from '@/views/user/UserResetPassword.vue'
@@ -44,12 +44,12 @@ const routes = [
         {path:'/detection/overview',component:DetectionOverview},
         {path:'/detection/result',component:DetectionResult},
         {path:'/detection/report',component:DetectionReport},
-        {path:'/detection/image',component:DetectionImage},
-        {path:'/conservation/manage',component:Conservation},
+                {path:'/conservation/manage',component:Conservation},
         {path:'/restoration/manage',component:Restoration},
         {path:'/library/manage',component:DigitalLibrary},
         {path:'/archive/manage',component:DigitalArchive},
         {path:'/ai/manage',component:AiChat},
+        {path:'/detection/experiment',component:LabInstruments},
         {path:'/user/info',component:UserInfoVue},
         {path:'/user/avatar',component:UserAvatarVue},
         {path:'/user/resetPassword',component:UserResetPasswordVue}
