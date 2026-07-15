@@ -208,6 +208,9 @@ CREATE TABLE IF NOT EXISTS detection_analysis (
     sample_quantity   VARCHAR(50)   COMMENT '样品数量',
     sample_method     VARCHAR(200)  COMMENT '取样方法',
     purpose           VARCHAR(200)  COMMENT '目的',
+    instrument_name   VARCHAR(200)  COMMENT '仪器名称',
+    instrument_model  VARCHAR(200)  COMMENT '仪器型号',
+    test_params       TEXT          COMMENT '测试参数',
     storage_location  VARCHAR(200)  COMMENT '存放位置',
     departure_time    VARCHAR(50)   COMMENT '发出时间',
     destination       VARCHAR(200)  COMMENT '去向',
@@ -368,3 +371,36 @@ CREATE TABLE IF NOT EXISTS lab_instruments (
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME     DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仪器分析表';
+
+-- ============================================
+-- 10. 分析结果模块
+-- ============================================
+
+-- 10.1 分析结果表（检测分析结果页面卡片数据）
+CREATE TABLE IF NOT EXISTS analysis_results (
+    id                 INT          PRIMARY KEY AUTO_INCREMENT,
+    detection_id       INT          NOT NULL COMMENT '关联检测分析ID',
+    artifact_code      VARCHAR(100) COMMENT '文物编号（自动写入）',
+    artifact_name      VARCHAR(200) COMMENT '文物名称（自动写入）',
+    sample_photo       VARCHAR(500) COMMENT '样品照片（自动写入）',
+    experiment_method  VARCHAR(200) COMMENT '实验方法（自动写入=总览目的字段）',
+    detection_purpose  TEXT         COMMENT '检测目的（用户填写）',
+    instrument_model   VARCHAR(200) COMMENT '仪器型号（用户填写）',
+    test_params        TEXT         COMMENT '测试参数（用户填写）',
+    create_time        DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time        DATETIME     DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分析结果表';
+
+-- 10.2 实验结果表
+CREATE TABLE IF NOT EXISTS experiment_results (
+    id              INT          PRIMARY KEY AUTO_INCREMENT,
+    detection_id    INT          NOT NULL COMMENT '关联检测分析ID',
+    experiment_name VARCHAR(200) COMMENT '实验名称',
+    status          VARCHAR(20)  DEFAULT '待检测' COMMENT '待检测/检测中/待审核/已完成',
+    result_data     TEXT         COMMENT '实验结果数据JSON',
+    images          TEXT         COMMENT '图片URL列表JSON数组',
+    attachments     TEXT         COMMENT '附件列表JSON数组',
+    notes           TEXT         COMMENT '工作备注',
+    create_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME     DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='实验结果表';

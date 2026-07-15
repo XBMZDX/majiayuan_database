@@ -110,7 +110,7 @@ const handleImport = async () => {
             sampleQuantity: item['样品数量']||'', sampleMethod: item['取样方法']||'',
             purpose: item['目的']||'', storageLocation: item['存放位置']||'',
             departureTime: excelDateToStr(item['出库时间']), destination: item['去处']||'',
-            samplePhoto: item['取样照片']||'', analysisData: item['目的']||'', analysisReport: item['目的']||'', manager: item['文物管理人']||'',
+            samplePhoto: item['取样照片']||'', analysisData: '', analysisReport: '', manager: item['文物管理人']||'',
             sampler: item['取样人']||'', notes: item['备注']||''
         }))
         for (const d of importData) await request.post('/admin/detection', d)
@@ -155,7 +155,7 @@ const resetAddForm = () => {
     addCascader.value = []
 }
 const onAddClosed = () => { resetAddForm() }
-const submitAdd = async () => { const d = { ...addForm.value }; d.analysisData = d.purpose; d.analysisReport = d.purpose; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
 const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true; editCascader.value = parsePath(row.excavationRelic || '') }

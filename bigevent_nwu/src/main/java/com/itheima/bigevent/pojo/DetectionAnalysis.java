@@ -18,6 +18,9 @@ public class DetectionAnalysis {
     private String sampleQuantity;
     private String sampleMethod;
     private String purpose;
+    private String instrumentName;
+    private String instrumentModel;
+    private String testParams;
     private String storageLocation;
     private String departureTime;
     private String destination;

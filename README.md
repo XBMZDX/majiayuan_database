@@ -57,8 +57,9 @@
 - **墓葬管理** — 墓葬信息 CRUD、棺/车配置
 - **工作流程** — 流程树 + 时间轴 + 完整档案（工作记录、图片、附件、文件预览）
 - **出土文物** — 文物录入、Excel 批量导入导出、按墓葬/棺/车分类筛选
+- **检测实验** — 仪器库管理（卡片总览、照片/文档上传）
 - **检测分析** — 文物取样、检测数据、分析报告管理
-- **文物总览** — 多维度统计与筛选
+- **分析结果** — 联动总览自动生成结果卡片，支持编辑检测目的/仪器/参数
 - **分类字典** — 材质分类、完整度分类
 - **用户认证** — JWT 登录、权限拦截
 
@@ -125,6 +126,10 @@ npm run dev
 | 检测 | `detection_analysis` | 检测分析表 |
 | 工作流 | `workflow_tree/timeline/note/media` | 墓葬工作流 4 表 |
 | 工作流 | `coffin_workflow_tree/timeline/note/media` | 棺工作流 4 表 |
+| 工作流 | `chariot_workflow_tree/timeline/note/media` | 车工作流 4 表 |
+| 仪器 | `lab_instruments` | 检测仪器表 |
+| 分析 | `analysis_results` | 分析结果表 |
+| 实验 | `experiment_results` | 实验结果表 |
 
 ## 配置说明
 
