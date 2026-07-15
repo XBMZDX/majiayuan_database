@@ -2,6 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
+import { useTokenStore } from '@/stores/token.js'
+const token = computed(() => useTokenStore().token)
 
 const list = ref([])
 const stats = ref({ total: 0, relicDistribution: [], purposeDistribution: [] })
@@ -64,6 +66,11 @@ const openDetail = (row) => { detailData.value = { ...row }; detailEditMode.valu
 const enterDetailEditMode = () => { detailBackup.value = { ...detailData.value }; detailEditMode.value = true; detailCascader.value = parsePath(detailData.value.excavationRelic || '') }
 const cancelDetailEdit = () => { detailData.value = { ...detailBackup.value }; detailEditMode.value = false }
 const saveDetailEdit = async () => { detailData.value.excavationRelic = getPath(detailCascader.value); await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
+
+// 照片上传（与检测实验总览完全一致）
+const onDetailPhoto = (res) => { detailData.value.samplePhoto = res.data }
+const onAddPhoto = (res) => { addForm.value.samplePhoto = res.data }
+const onEditPhoto = (res) => { editData.value.samplePhoto = res.data }
 
 const del = (row) => { ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }).then(async () => { await request.delete('/admin/detection/' + row.id); ElMessage.success('删除成功'); fetchList() }).catch(() => {}) }
 
@@ -208,7 +215,6 @@ onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
                 <el-table-column label="样品数量" prop="sampleQuantity" />
                 <el-table-column label="取样方法" prop="sampleMethod" />
                 <el-table-column label="目的" prop="purpose" />
-                <el-table-column label="取样照片" prop="samplePhoto" />
                 <el-table-column label="操作" fixed="right">
                     <template #default="{row}"><el-link type="primary" @click="openDetail(row)">详情</el-link></template>
                 </el-table-column>
@@ -235,7 +241,10 @@ onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
                 <el-descriptions-item label="存放位置">{{ detailData.storageLocation || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="出库时间">{{ detailData.departureTime || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="去处">{{ detailData.destination || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="取样照片">{{ detailData.samplePhoto || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="取样照片">
+                        <el-image v-if="detailData.samplePhoto" :src="detailData.samplePhoto" fit="cover" style="width:200px;height:140px;border-radius:6px" :preview-src-list="[detailData.samplePhoto]" />
+                        <span v-else>-</span>
+                    </el-descriptions-item>
                 <el-descriptions-item label="分析数据" :span="2">{{ detailData.analysisData || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="分析报告" :span="2">{{ detailData.analysisReport || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="文物管理人">{{ detailData.manager || '-' }}</el-descriptions-item>
@@ -258,7 +267,12 @@ onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
                 <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="detailData.storageLocation" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="detailData.departureTime" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="去处"><el-input v-model="detailData.destination" /></el-form-item></el-col>
-                <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="detailData.samplePhoto" /></el-form-item></el-col>
+                <el-form-item label="取样照片">
+                        <el-upload v-if="detailEditMode" action="/api/upload" name="file" :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true" :on-success="onDetailPhoto" accept="image/*">
+                            <el-button type="primary">选择照片</el-button>
+                        </el-upload>
+                        <el-form-item v-if="detailData.samplePhoto" label="预览"><el-image :src="detailData.samplePhoto" fit="cover" style="width:200px;height:120px;border-radius:6px" /></el-form-item>
+                    </el-form-item>
                 <el-col :span="12"><el-form-item label="管理人"><el-input v-model="detailData.manager" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="取样人"><el-input v-model="detailData.sampler" /></el-form-item></el-col>
                 <el-col :span="24"><el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item></el-col>
@@ -281,7 +295,12 @@ onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
             <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="addForm.storageLocation" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="出库时间"><el-date-picker v-model="addForm.departureTime" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY/MM/DD" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="addForm.destination" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="addForm.samplePhoto" /></el-form-item></el-col>
+            <el-form-item label="取样照片">
+<el-upload action="/api/upload" name="file" :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true" :on-success="onAddPhoto" accept="image/*">
+                <el-button type="primary">选择照片</el-button>
+            </el-upload>
+            <el-form-item v-if="addForm.samplePhoto" label="预览"><el-image :src="addForm.samplePhoto" fit="cover" style="width:200px;height:120px;border-radius:6px" /></el-form-item>
+        </el-form-item>
             <el-col :span="12"><el-form-item label="管理人"><el-input v-model="addForm.manager" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样人"><el-input v-model="addForm.sampler" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="addForm.notes" type="textarea" :rows="2" /></el-form-item></el-col>
@@ -303,7 +322,12 @@ onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
             <el-col :span="12"><el-form-item label="存放位置"><el-input v-model="editData.storageLocation" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="出库时间"><el-input v-model="editData.departureTime" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="去处"><el-input v-model="editData.destination" /></el-form-item></el-col>
-            <el-col :span="12"><el-form-item label="取样照片"><el-input v-model="editData.samplePhoto" /></el-form-item></el-col>
+            <el-form-item label="取样照片">
+            <el-upload action="/api/upload" name="file" :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true" :on-success="onEditPhoto" accept="image/*">
+                <el-button type="primary">选择照片</el-button>
+            </el-upload>
+            <el-form-item v-if="editData.samplePhoto" label="预览"><el-image :src="editData.samplePhoto" fit="cover" style="width:200px;height:120px;border-radius:6px" /></el-form-item>
+        </el-form-item>
             <el-col :span="12"><el-form-item label="管理人"><el-input v-model="editData.manager" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="取样人"><el-input v-model="editData.sampler" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="editData.notes" type="textarea" :rows="2" /></el-form-item></el-col>
