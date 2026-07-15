@@ -120,16 +120,16 @@ onMounted(() => { fetchBurialList() })
             <div v-if="batchMode" class="batch-bar"><span class="batch-info">已选 <strong>{{ selectedRows.length }}</strong> 件文物</span><div><el-button type="danger" @click="confirmBatchDelete">确认删除</el-button><el-button @click="cancelBatchMode">取消</el-button></div></div>
             <el-table :data="pagedArtifacts" style="width:100%" @selection-change="handleSelectionChange">
                 <el-table-column v-if="batchMode" type="selection" width="50" />
-                <el-table-column label="序号" prop="serialNumber" width="60" />
-                <el-table-column label="文物编号" width="140"><template #default="{ row }">{{ row.newArtifactCode || row.originalArtifactCode || '-' }}</template></el-table-column>
-                <el-table-column label="文物名称" width="160"><template #default="{ row }">{{ row.newArtifactName || row.originalArtifactName || '-' }}</template></el-table-column>
-                <el-table-column label="出土遗迹" prop="excavationRelic" width="140" />
-                <el-table-column label="出土位置" prop="excavationPosition" width="140" />
-                <el-table-column label="材质" prop="material1" width="120" />
-                <el-table-column label="完整度" prop="completeness" width="80" />
-                <el-table-column label="数量" prop="quantity1" width="70" />
-                <el-table-column label="科技检测情况" prop="testingStatus" width="140" />
-                <el-table-column label="操作" width="80" fixed="right"><template #default="{ row }"><el-link type="primary" @click="openDetail(row)">详情</el-link></template></el-table-column>
+                <el-table-column label="序号" prop="serialNumber" />
+                <el-table-column label="文物编号"><template #default="{ row }">{{ row.newArtifactCode || row.originalArtifactCode || '-' }}</template></el-table-column>
+                <el-table-column label="文物名称" ><template #default="{ row }">{{ row.newArtifactName || row.originalArtifactName || '-' }}</template></el-table-column>
+                <el-table-column label="出土遗迹" prop="excavationRelic" />
+                <el-table-column label="出土位置" prop="excavationPosition" />
+                <el-table-column label="材质" prop="material1" />
+                <el-table-column label="完整度" prop="completeness" />
+                <el-table-column label="数量" prop="quantity1" />
+                <el-table-column label="科技检测情况" prop="testingStatus" />
+                <el-table-column label="操作" fixed="right"><template #default="{ row }"><el-link type="primary" @click="openDetail(row)">详情</el-link></template></el-table-column>
                 <template #empty><el-empty description="该车暂无出土文物" /></template>
             </el-table>
             <el-pagination v-model:current-page="pageNum" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" :total="artifacts.length" background style="margin-top:16px;justify-content:flex-end" @current-change="onPageChange" />

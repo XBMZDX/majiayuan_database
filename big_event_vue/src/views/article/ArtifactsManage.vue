@@ -442,20 +442,20 @@ const handleImport = async () => {
         <!-- 文物列表 -->
         <el-table :data="artifacts" style="width: 100%" @selection-change="handleSelectionChange" ref="selectionRef">
             <el-table-column v-if="batchMode" type="selection" width="50" />
-            <el-table-column label="序号" prop="serialNumber" width="60" />
-            <el-table-column label="文物编号" width="140">
+            <el-table-column label="序号" prop="serialNumber" />
+            <el-table-column label="文物编号">
                 <template #default="{ row }">{{ row.newArtifactCode || row.originalArtifactCode || '—' }}</template>
             </el-table-column>
-            <el-table-column label="文物名称" width="160">
+            <el-table-column label="文物名称" >
                 <template #default="{ row }">{{ row.newArtifactName || row.originalArtifactName || '—' }}</template>
             </el-table-column>
-            <el-table-column label="出土遗迹" prop="excavationRelic" width="140" />
-            <el-table-column label="出土位置" prop="excavationPosition" width="140" />
-            <el-table-column label="材质" prop="material1" width="120" />
-            <el-table-column label="完整度" prop="completeness" width="80" />
-            <el-table-column label="数量" prop="quantity1" width="70" />
-            <el-table-column label="科技检测情况" prop="testingStatus" width="140" />
-            <el-table-column label="操作" width="80" fixed="right">
+            <el-table-column label="出土遗迹" prop="excavationRelic" />
+            <el-table-column label="出土位置" prop="excavationPosition" />
+            <el-table-column label="材质" prop="material1" />
+            <el-table-column label="完整度" prop="completeness" />
+            <el-table-column label="数量" prop="quantity1" />
+            <el-table-column label="科技检测情况" prop="testingStatus" />
+            <el-table-column label="操作" fixed="right">
                 <template #default="{ row }">
                     <el-link type="primary" @click="openDetail(row)">详情</el-link>
                 </template>
