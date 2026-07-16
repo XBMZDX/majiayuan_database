@@ -72,7 +72,10 @@ const menuTitleMap = {
 }
 
 // 当前页面标题（从当前路由路径计算）
-const pageTitle = computed(() => menuTitleMap[route.path] || '文物信息总览')
+const pageTitle = computed(() => {
+    if (route.path.startsWith('/detection/experiment/')) return '检测分析结果详情'
+    return menuTitleMap[route.path] || '文物信息总览'
+})
 
 const handleCommand = (command) => {
     if (command === 'logout') {

@@ -1,10 +1,18 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 
+const router = useRouter()
+
 const list = ref([])
+
+const openDetail = (item) => {
+    sessionStorage.setItem('expIds', JSON.stringify(list.value.map(i => i.id)))
+    router.push('/detection/experiment/' + item.id)
+}
 const fetchList = async () => { const res = await request.get('/admin/analysis-result'); list.value = res.data || [] }
 
 // ========== 编辑弹窗 ==========
@@ -35,7 +43,7 @@ onMounted(fetchList)
 
         <!-- 卡片网格 -->
         <div class="lab-grid" v-if="list.length > 0">
-            <div class="lab-card" v-for="item in list" :key="item.id">
+            <div class="lab-card" v-for="item in list" :key="item.id" @dblclick="openDetail(item)">
                 <!-- 顶部：文物名称 + 样品编号 -->
                 <div class="card-top">
                     <span class="card-name">{{ item.artifactName || '-' }}</span>

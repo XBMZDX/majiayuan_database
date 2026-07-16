@@ -20,6 +20,7 @@ import AiChat from '@/views/article/AiChat.vue'
 import LabInstruments from '@/views/article/LabInstruments.vue'
 import DetectionOverview from '@/views/article/DetectionOverview.vue'
 import DetectionResult from '@/views/article/DetectionResult.vue'
+import ExperimentDetail from '@/views/article/ExperimentDetail.vue'
 import DetectionReport from '@/views/article/DetectionReport.vue'
 import UserAvatarVue from '@/views/user/UserAvatar.vue'
 import UserInfoVue from '@/views/user/UserInfo.vue'
@@ -43,6 +44,7 @@ const routes = [
         {path:'/detection/manage',component:DetectionAnalysis},
         {path:'/detection/overview',component:DetectionOverview},
         {path:'/detection/result',component:DetectionResult},
+        {path:'/detection/experiment/:id',component:ExperimentDetail},
         {path:'/detection/report',component:DetectionReport},
                 {path:'/conservation/manage',component:Conservation},
         {path:'/restoration/manage',component:Restoration},

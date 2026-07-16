@@ -20,6 +20,11 @@ public class AnalysisResultController {
         return Result.success(mapper.list());
     }
 
+    @GetMapping("/{id}")
+    public Result<AnalysisResult> detail(@PathVariable Integer id) {
+        return Result.success(mapper.findById(id));
+    }
+
     @PutMapping("/{id}")
     public Result update(@PathVariable Integer id, @RequestBody AnalysisResult r) {
         r.setId(id); mapper.update(r); return Result.success();

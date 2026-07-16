@@ -10,6 +10,9 @@ public interface AnalysisResultMapper {
     @Select("SELECT * FROM analysis_results ORDER BY id DESC")
     List<AnalysisResult> list();
 
+    @Select("SELECT * FROM analysis_results WHERE id = #{id}")
+    AnalysisResult findById(Integer id);
+
     @Insert("INSERT INTO analysis_results (detection_id,artifact_code,artifact_name,sample_photo,experiment_method) VALUES (#{detectionId},#{artifactCode},#{artifactName},#{samplePhoto},#{experimentMethod})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     void insert(AnalysisResult r);
