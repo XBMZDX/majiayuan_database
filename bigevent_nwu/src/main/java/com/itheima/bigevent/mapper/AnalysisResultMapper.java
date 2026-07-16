@@ -20,6 +20,9 @@ public interface AnalysisResultMapper {
     @Delete("DELETE FROM analysis_results WHERE id = #{id}")
     void delete(Integer id);
 
+    @Select("SELECT * FROM analysis_results WHERE detection_id = #{detectionId}")
+    List<AnalysisResult> listByDetectionId(Integer detectionId);
+
     @Delete("DELETE FROM analysis_results WHERE detection_id = #{detectionId}")
     void deleteByDetectionId(Integer detectionId);
 }

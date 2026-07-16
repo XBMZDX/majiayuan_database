@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
+import java.util.*;
 import java.util.List;
 
 @RestController
@@ -27,20 +28,76 @@ public class DetectionController {
     public Result add(@RequestBody DetectionAnalysis d) {
         d.setCreateTime(LocalDateTime.now()); d.setUpdateTime(LocalDateTime.now());
         mapper.insert(d);
-        // 自动创建分析结果行
-        AnalysisResult r = new AnalysisResult();
-        r.setDetectionId(d.getId());
-        r.setArtifactCode(d.getArtifactCode());
-        r.setArtifactName(d.getArtifactName());
-        r.setSamplePhoto(d.getSamplePhoto());
-        r.setExperimentMethod(d.getPurpose());
-        resultMapper.insert(r);
+        // 拆分目的，每个实验名创建一条分析结果
+        String purpose = d.getPurpose();
+        if (purpose != null && !purpose.isEmpty()) {
+            for (String name : purpose.split("/")) {
+                String expName = name.trim();
+                if (expName.isEmpty()) continue;
+                AnalysisResult r = new AnalysisResult();
+                r.setDetectionId(d.getId());
+                r.setArtifactCode(d.getArtifactCode());
+                r.setArtifactName(d.getArtifactName());
+                r.setSamplePhoto(d.getSamplePhoto());
+                r.setExperimentMethod(expName);
+                resultMapper.insert(r);
+            }
+        } else {
+            AnalysisResult r = new AnalysisResult();
+            r.setDetectionId(d.getId());
+            r.setArtifactCode(d.getArtifactCode());
+            r.setArtifactName(d.getArtifactName());
+            r.setSamplePhoto(d.getSamplePhoto());
+            resultMapper.insert(r);
+        }
         return Result.success();
     }
 
     @PutMapping("/{id}")
     public Result update(@PathVariable Integer id, @RequestBody DetectionAnalysis d) {
-        d.setId(id); d.setUpdateTime(LocalDateTime.now()); mapper.update(d); return Result.success();
+        d.setId(id); d.setUpdateTime(LocalDateTime.now()); mapper.update(d);
+        // 同步联动字段：先保存用户数据，删旧建新，再恢复
+        Map<String, AnalysisResult> saved = new HashMap<>();
+        for (AnalysisResult old : resultMapper.listByDetectionId(id)) {
+            String k = old.getExperimentMethod() != null ? old.getExperimentMethod() : "";
+            saved.put(k, old);
+        }
+        resultMapper.deleteByDetectionId(id);
+        String purpose = d.getPurpose();
+        if (purpose != null && !purpose.isEmpty()) {
+            for (String name : purpose.split("/")) {
+                String expName = name.trim();
+                if (expName.isEmpty()) continue;
+                AnalysisResult r = new AnalysisResult();
+                r.setDetectionId(id);
+                r.setArtifactCode(d.getArtifactCode());
+                r.setArtifactName(d.getArtifactName());
+                r.setSamplePhoto(d.getSamplePhoto());
+                r.setExperimentMethod(expName);
+                // 恢复用户数据
+                AnalysisResult savedRow = saved.get(expName);
+                if (savedRow != null) {
+                    r.setDetectionPurpose(savedRow.getDetectionPurpose());
+                    r.setInstrumentModel(savedRow.getInstrumentModel());
+                    r.setTestParams(savedRow.getTestParams());
+                }
+                resultMapper.insert(r);
+            }
+        } else {
+            AnalysisResult r = new AnalysisResult();
+            r.setDetectionId(id);
+            r.setArtifactCode(d.getArtifactCode());
+            r.setArtifactName(d.getArtifactName());
+            r.setSamplePhoto(d.getSamplePhoto());
+            AnalysisResult savedRow = saved.get("");
+            if (savedRow != null) {
+                r.setDetectionPurpose(savedRow.getDetectionPurpose());
+                r.setInstrumentModel(savedRow.getInstrumentModel());
+                r.setTestParams(savedRow.getTestParams());
+            }
+            resultMapper.insert(r);
+        }
+        return Result.success();
     }
 
     @DeleteMapping("/{id}")
