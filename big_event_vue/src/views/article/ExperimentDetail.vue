@@ -78,47 +78,49 @@ onMounted(fetchDetail)
 
 <template>
     <div class="detail-root">
-        <!-- 固定导航栏 -->
-        <div class="nav-bar">
-            <div class="nav-left">
-                <el-button :icon="ArrowLeft" text size="large" @click="goBack" class="back-btn">
-                    返回实验列表
-                </el-button>
-            </div>
-            <div class="nav-center">
-                <span class="nav-title" v-if="result">
-                    {{ result.experimentMethod || '实验' }} — {{ result.artifactName || '未知' }}
-                </span>
-            </div>
-            <div class="nav-right">
-                <el-button size="small" :disabled="!hasPrev" @click="goPrev">◀ 上一个</el-button>
-                <el-button size="small" :disabled="!hasNext" @click="goNext">下一个 ▶</el-button>
-            </div>
-        </div>
-
-        <!-- 内容区 -->
         <div class="detail-page" v-loading="loading">
             <template v-if="result">
-                <!-- 页面标题 -->
-                <div class="page-hero">
-                    <h1 class="hero-title">{{ result.experimentMethod || '实验' }} — {{ result.artifactName || '未知样品' }}</h1>
-                    <div class="hero-tags">
-                        <el-tag size="large" effect="plain" type="primary">{{ result.experimentMethod }}</el-tag>
-                        <el-tag size="large" effect="plain">{{ result.artifactCode }}</el-tag>
-                        <el-tag size="large" effect="plain" type="success">{{ selectedExp?.status || '待检测' }}</el-tag>
+                <!-- 统一大卡片 -->
+                <el-card shadow="never" class="report-card">
+                    <!-- 卡片标题 = 导航栏 -->
+                    <template #header>
+                        <div class="card-nav">
+                            <div class="nav-left">
+                                <el-button :icon="ArrowLeft" text size="large" @click="goBack" class="back-btn">
+                                    返回实验列表
+                                </el-button>
+                            </div>
+                            <div class="nav-center">
+                                <span class="nav-title">{{ result.experimentMethod || '实验' }} — {{ result.artifactName || '未知' }}</span>
+                            </div>
+                            <div class="nav-right">
+                                <el-button size="small" :disabled="!hasPrev" @click="goPrev">◀ 上一个</el-button>
+                                <el-button size="small" :disabled="!hasNext" @click="goNext">下一个 ▶</el-button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- 卡片内容 -->
+                    <div class="report-body">
+                        <!-- 元信息 -->
+                        <div class="report-meta">
+                            <el-tag size="small" effect="plain" type="primary">{{ result.experimentMethod }}</el-tag>
+                            <el-tag size="small" effect="plain">{{ result.artifactCode }}</el-tag>
+                            <el-tag size="small" effect="plain" type="success">{{ selectedExp?.status || '待检测' }}</el-tag>
+                        </div>
+
+                        <!-- 实验切换 Tabs -->
+                        <el-tabs v-if="experiments.length > 1" v-model="selectedExp" type="card" style="margin-top:8px">
+                            <el-tab-pane v-for="exp in experiments" :key="exp.id" :label="exp.experimentName" :name="exp" />
+                        </el-tabs>
+
+                        <!-- 四个展示模块 -->
+                        <ExperimentData :experiment="selectedExp" @update="onDataUpdate" />
+                        <ExperimentImage :experiment="selectedExp" @update="onImageUpdate" />
+                        <ExperimentConclusion :experiment="selectedExp" @update="onNotesUpdate" />
+                        <ExperimentAttachment :experiment="selectedExp" @update="onAttUpdate" />
                     </div>
-                </div>
-
-                <!-- 实验切换 Tabs -->
-                <el-tabs v-if="experiments.length > 1" v-model="selectedExp" type="card" class="exp-tabs">
-                    <el-tab-pane v-for="exp in experiments" :key="exp.id" :label="exp.experimentName" :name="exp" />
-                </el-tabs>
-
-                <!-- 四个展示模块 -->
-                <ExperimentData :experiment="selectedExp" @update="onDataUpdate" />
-                <ExperimentImage :experiment="selectedExp" @update="onImageUpdate" />
-                <ExperimentConclusion :experiment="selectedExp" @update="onNotesUpdate" />
-                <ExperimentAttachment :experiment="selectedExp" @update="onAttUpdate" />
+                </el-card>
             </template>
             <el-empty v-else description="未找到实验数据" :image-size="100" style="margin-top:80px" />
         </div>
@@ -127,9 +129,15 @@ onMounted(fetchDetail)
 
 <style scoped>
 .detail-root { min-height: 100vh; background: #F5F7FA; }
+.detail-page { max-width: 1000px; margin: 0 auto; padding: 24px 0 60px; }
 
-/* 固定导航栏 */
-.nav-bar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 20px; background: #fff; border-bottom: 1px solid #E5E6EB; }
+/* 统一大卡片 */
+.report-card { border: 1px solid #E5E6EB; border-radius: 10px; overflow: hidden; }
+.report-card :deep(.el-card__header) { padding: 0 24px; border-bottom: 1px solid #E5E6EB; }
+.report-card :deep(.el-card__body) { padding: 0; }
+
+/* 卡片内导航 */
+.card-nav { display: flex; align-items: center; justify-content: space-between; height: 52px; }
 .nav-left, .nav-right { display: flex; align-items: center; gap: 8px; flex: 1; }
 .nav-center { flex: 2; text-align: center; }
 .nav-title { font-size: 15px; font-weight: 600; color: #1D2129; }
@@ -137,12 +145,9 @@ onMounted(fetchDetail)
 .back-btn { font-size: 15px; transition: color .15s; }
 .back-btn:hover { color: #409EFF !important; }
 
-/* 内容 */
-.detail-page { max-width: 1000px; margin: 0 auto; padding: 0 0 60px; }
-.page-hero { padding: 32px 0 20px; }
-.hero-title { font-size: 24px; font-weight: 800; color: #1D2129; margin: 0 0 14px; }
-.hero-tags { display: flex; gap: 10px; flex-wrap: wrap; }
-.exp-tabs { margin-bottom: 20px; }
+/* 卡片内容 */
+.report-body { padding: 20px 28px 28px; }
+.report-meta { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 页面过渡 */
 .detail-root { animation: fadeIn .3s ease; }
