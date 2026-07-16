@@ -60,7 +60,6 @@ const menuTitleMap = {
     '/detection/experiment': '检测实验总览',
     '/detection/overview': '检测分析总览',
     '/detection/result': '检测分析结果',
-    '/detection/report': '检测分析报告',
     '/conservation/manage': '文物保护',
     '/restoration/manage': '文物复原',
     '/archive/manage': '文物数字档案中心',
@@ -142,7 +141,6 @@ const handleCommand = (command) => {
                     <el-menu-item index="/detection/experiment">检测实验总览</el-menu-item>
                     <el-menu-item index="/detection/overview">检测分析总览</el-menu-item>
                     <el-menu-item index="/detection/result">检测分析结果</el-menu-item>
-                    <el-menu-item index="/detection/report">检测分析报告</el-menu-item>
                 </el-sub-menu>
                 <el-menu-item index="/conservation/manage">
                     <el-icon><Umbrella /></el-icon>
