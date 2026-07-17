@@ -12,8 +12,6 @@ import CoffinArtifacts from '@/views/article/CoffinArtifacts.vue'
 import ChariotBasic from '@/views/article/ChariotBasic.vue'
 import ChariotArtifacts from '@/views/article/ChariotArtifacts.vue'
 import DetectionAnalysis from '@/views/article/DetectionAnalysis.vue'
-import Conservation from '@/views/article/Conservation.vue'
-import Restoration from '@/views/article/Restoration.vue'
 import DigitalLibrary from '@/views/article/DigitalLibrary.vue'
 import DigitalArchive from '@/views/article/DigitalArchive.vue'
 import AiChat from '@/views/article/AiChat.vue'
@@ -44,8 +42,13 @@ const routes = [
         {path:'/detection/overview',component:DetectionOverview},
         {path:'/detection/result',component:DetectionResult},
         {path:'/detection/experiment/:id',component:ExperimentDetail},
-                {path:'/conservation/manage',component:Conservation},
-        {path:'/restoration/manage',component:Restoration},
+                {path:'/conservation/overview',component:()=>import('@/views/article/conservation/Overview.vue')},
+        {path:'/conservation/disease',component:()=>import('@/views/article/conservation/Disease.vue')},
+        {path:'/conservation/archive',component:()=>import('@/views/article/conservation/Archive.vue')},
+        {path:'/conservation/process',component:()=>import('@/views/article/conservation/Process.vue')},
+        {path:'/conservation/compare',component:()=>import('@/views/article/conservation/Compare.vue')},
+        {path:'/conservation/result',component:()=>import('@/views/article/conservation/Result.vue')},
+        {path:'/conservation/monitor',component:()=>import('@/views/article/conservation/Monitor.vue')},
         {path:'/library/manage',component:DigitalLibrary},
         {path:'/archive/manage',component:DigitalArchive},
         {path:'/ai/manage',component:AiChat},

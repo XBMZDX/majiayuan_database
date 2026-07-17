@@ -60,8 +60,13 @@ const menuTitleMap = {
     '/detection/experiment': '检测实验总览',
     '/detection/overview': '检测分析总览',
     '/detection/result': '检测分析结果',
-    '/conservation/manage': '文物保护',
-    '/restoration/manage': '文物复原',
+    '/conservation/overview': '保护修复总览',
+    '/conservation/disease': '病害调查',
+    '/conservation/archive': '保护修复档案',
+    '/conservation/process': '修复过程记录',
+    '/conservation/compare': '修复前后对比',
+    '/conservation/result': '文物复原成果',
+    '/conservation/monitor': '后续监测',
     '/archive/manage': '文物数字档案中心',
     '/library/manage': '知识中心',
     '/ai/manage': 'AI智能助手',
@@ -142,14 +147,19 @@ const handleCommand = (command) => {
                     <el-menu-item index="/detection/overview">检测分析总览</el-menu-item>
                     <el-menu-item index="/detection/result">检测分析结果</el-menu-item>
                 </el-sub-menu>
-                <el-menu-item index="/conservation/manage">
-                    <el-icon><Umbrella /></el-icon>
-                    <span>文物保护</span>
-                </el-menu-item>
-                <el-menu-item index="/restoration/manage">
-                    <el-icon><Umbrella /></el-icon>
-                    <span>文物复原</span>
-                </el-menu-item>
+                <el-sub-menu index="/conservation/group">
+                    <template #title>
+                        <el-icon><Umbrella /></el-icon>
+                        <span>文物保护、修复及复原</span>
+                    </template>
+                    <el-menu-item index="/conservation/overview">保护修复总览</el-menu-item>
+                    <el-menu-item index="/conservation/disease">病害调查</el-menu-item>
+                    <el-menu-item index="/conservation/archive">保护修复档案</el-menu-item>
+                    <el-menu-item index="/conservation/process">修复过程记录</el-menu-item>
+                    <el-menu-item index="/conservation/compare">修复前后对比</el-menu-item>
+                    <el-menu-item index="/conservation/result">文物复原成果</el-menu-item>
+                    <el-menu-item index="/conservation/monitor">后续监测</el-menu-item>
+                </el-sub-menu>
                 <el-menu-item index="/archive/manage">
                     <el-icon><Reading /></el-icon>
                     <span>文物数字档案中心</span>
