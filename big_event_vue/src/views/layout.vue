@@ -78,7 +78,28 @@ const menuTitleMap = {
 // 当前页面标题（从当前路由路径计算）
 const pageTitle = computed(() => {
     if (route.path.startsWith('/detection/experiment/')) return '检测分析结果详情'
+    if (/^\/conservation\/project\/[^/]+\/archive$/.test(route.path)) return '保护修复档案'
+    if (/^\/conservation\/project\/[^/]+\/disease$/.test(route.path)) return '病害调查'
+    if (/^\/conservation\/project\/[^/]+\/process$/.test(route.path)) return '修复过程记录'
+    if (/^\/conservation\/project\/[^/]+\/comparison$/.test(route.path)) return '修复前后对比'
+    if (/^\/conservation\/project\/[^/]+\/restoration$/.test(route.path)) return '文物复原成果'
+    if (/^\/conservation\/project\/[^/]+\/monitoring$/.test(route.path)) return '后续监测'
     return menuTitleMap[route.path] || '文物信息总览'
+})
+
+// 项目级业务路由仍高亮对应的全局导航项。
+const activeMenu = computed(() => {
+    const match = route.path.match(/^\/conservation\/project\/[^/]+\/([^/]+)$/)
+    if (!match) return route.path
+    const map = {
+        archive: '/conservation/archive',
+        disease: '/conservation/disease',
+        process: '/conservation/process',
+        comparison: '/conservation/compare',
+        restoration: '/conservation/result',
+        monitoring: '/conservation/monitor'
+    }
+    return map[match[1]] || route.path
 })
 
 const handleCommand = (command) => {
@@ -109,7 +130,7 @@ const handleCommand = (command) => {
         <el-aside width="200px">
             <div class="el-aside__logo"></div>
             <!-- 菜单标签 -->
-            <el-menu active-text-color="#ffd04b" background-color="#1668C4" text-color="#fff" router>
+            <el-menu :default-active="activeMenu" active-text-color="#ffd04b" background-color="#1668C4" text-color="#fff" router>
                 <!-- 展示的对应组件访问的路径 -->
                 <el-menu-item index="/show/manage">
                     <el-icon><Promotion /></el-icon>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620">
+  <defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a47b4f"/><stop offset="1" stop-color="#56402e"/></linearGradient><filter id="n"><feTurbulence baseFrequency=".22" numOctaves="4" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="16"/></filter></defs>
+  <rect width="960" height="620" fill="#1b1c1d"/><path d="M100 150Q480 45 860 150V530Q480 600 100 520Z" fill="url(#b)" filter="url(#n)"/>
+  <g fill="#d4b486" opacity=".75"><circle cx="250" cy="290" r="33"/><circle cx="370" cy="430" r="48"/><circle cx="600" cy="240" r="41"/><circle cx="720" cy="405" r="55"/><circle cx="490" cy="330" r="25"/></g>
+  <g fill="#4e3828" opacity=".55"><circle cx="285" cy="255" r="16"/><circle cx="410" cy="390" r="22"/><circle cx="660" cy="370" r="29"/></g>
+  <text x="48" y="66" fill="#f4e8d5" font-size="26" font-family="sans-serif">车厢表面 · 渗透加固前</text>
+  <text x="48" y="584" fill="#d9c8ad" font-size="19" font-family="sans-serif">左侧 / 2026-07-21 09:10</text>
+</svg>

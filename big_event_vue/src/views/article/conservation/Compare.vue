@@ -1,2 +1,7 @@
-<template><div class="placeholder"><h2>修复前后对比 — 页面开发中...</h2></div></template>
-<style scoped>.placeholder{text-align:center;padding:60px;color:#999;}</style>
+<script setup>
+import ConservationComparison from './ConservationComparison.vue'
+</script>
+
+<template>
+    <ConservationComparison />
+</template>
