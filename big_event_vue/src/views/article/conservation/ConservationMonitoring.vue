@@ -1,25 +1,30 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MonitoringSummaryBar from './components/monitoring/MonitoringSummaryBar.vue'
 import MonitoringPlanTargetList from './components/monitoring/MonitoringPlanTargetList.vue'
 import MonitoringWorkspace from './components/monitoring/MonitoringWorkspace.vue'
 import MonitoringAssistPanel from './components/monitoring/MonitoringAssistPanel.vue'
-import { mockProjects, createMockArchive, createMockArchiveWorkspace } from './archiveMock'
-import { calculateIndicatorLevel, createDraftRecord, createEmptyMonitoringPlan, createMockMonitoringPlans, createMonitoringSources } from './monitoringMock'
-import { USE_CONSERVATION_MONITORING_MOCK } from '@/api/conservationMonitoring'
+import { calculateIndicatorLevel, createDraftRecord, createEmptyMonitoringPlan } from './monitoringModel'
+import {
+    getMonitoringPlans, getMonitoringProject, getMonitoringSources,
+    getComparisonMediaContent, getMonitoringMediaContent, getRestorationMediaContent,
+    createProjectFromAlert, saveMonitoringWorkbench, uploadMonitoringMedia
+} from '@/api/conservationMonitoring'
 
 const route = useRoute(), router = useRouter()
 const projectId = computed(() => Number(route.params.projectId || route.query.projectId) || null)
-const storageKey = computed(() => `conservation-monitoring-workbench:${projectId.value}`)
 const loading = ref(true), loadError = ref(''), saving = ref(false), dirty = ref(false)
 const project = ref(null), sources = ref(null), plans = ref([])
 const activePlanId = ref(null), activeTargetId = ref(null), activeTaskId = ref(null), activeRecordId = ref(null), activeTab = ref('overview')
 const planDialog = ref(false), planStep = ref(0), targetDialog = ref(false), assistDrawer = ref(false), listDrawer = ref(false), alertDialog = ref(false), handlingAlert = ref(null)
+const projectDialog = ref(false), creatingProject = ref(false)
 const planForm = reactive({ sourceMode: 'manual', planCode: '', planName: '', planType: 'comprehensive', monitoringPurpose: '', monitoringScope: '', overallStrategy: '', responsiblePerson: '', participantNames: '', monitoringLocation: '文物保护实验室', startDate: '', expectedEndDate: '', defaultFrequencyValue: 1, defaultFrequencyUnit: 'month', autoGenerateTask: true, alertEnabled: true, selectedDiseaseIds: [], selectedComparisonIds: [], selectedRestorationIds: [] })
 const targetForm = reactive({ id: null, targetType: 'disease', targetName: '', sourceBusinessType: 'manual', sourceBusinessId: null, targetPart: '', targetLocation: '', riskLevel: 'medium', priorityLevel: 'medium', monitoringReason: '', currentStatus: '待首次监测', requiresImage: true, enabled: true, shootingPosition: '' })
 const alertForm = reactive({ immediateAction: '', treatmentAdvice: '', alertStatus: 'processing', requiresRecheck: true, requiresDiseaseSurvey: false, requiresIntervention: false, requiresNewProject: false })
+const projectForm = reactive({ projectCode: '', projectName: '', projectType: '综合', riskLevel: 'medium', principal: '', department: '', startDate: '', expectedEndDate: '', summary: '' })
+const objectUrls = new Set()
 
 const plan = computed(() => plans.value.find(x => x.id === activePlanId.value) || null)
 const target = computed(() => plan.value?.targets.find(x => x.id === activeTargetId.value) || null)
@@ -43,42 +48,81 @@ const selectPlan = id => { activePlanId.value = id; activeTargetId.value = plan.
 const selectTarget = id => { activeTargetId.value = id; activeRecordId.value = plan.value?.records.find(x => x.taskId === task.value?.id && x.targetId === id)?.id || null; listDrawer.value = false }
 const selectTask = item => { activeTaskId.value = item.id; activeRecordId.value = plan.value.records.find(x => x.taskId === item.id && x.targetId === target.value?.id)?.id || null }
 const markDirty = () => { dirty.value = true }
+const asObjectUrl = async requestCall => {
+    try {
+        const response = await requestCall()
+        const url = URL.createObjectURL(response.data)
+        objectUrls.add(url)
+        return url
+    } catch {
+        return ''
+    }
+}
+const hydrateProtectedMedia = async () => {
+    const jobs = []
+    for (const p of plans.value) {
+        for (const t of p.targets) {
+            const baseline = t.baseline
+            if (baseline?.baselineMediaId) {
+                const loader = baseline.sourceBusinessType === 'comparison_after'
+                    ? getComparisonMediaContent
+                    : baseline.sourceBusinessType === 'restoration'
+                        ? getRestorationMediaContent
+                        : null
+                if (loader) jobs.push(asObjectUrl(() => loader(baseline.baselineMediaId)).then(url => { baseline.baselineFileUrl = url }))
+            }
+        }
+        for (const r of p.records) {
+            for (const media of r.media || []) {
+                jobs.push(asObjectUrl(() => getMonitoringMediaContent(media.id)).then(url => { media.fileUrl = url }))
+            }
+        }
+    }
+    for (const comparison of sources.value.comparisons || []) {
+        for (const media of comparison.images || []) {
+            jobs.push(asObjectUrl(() => getComparisonMediaContent(media.id)).then(url => { media.fileUrl = url }))
+        }
+    }
+    for (const restoration of sources.value.restorations || []) {
+        for (const media of restoration.media || []) {
+            jobs.push(asObjectUrl(() => getRestorationMediaContent(media.id)).then(url => { media.fileUrl = url }))
+        }
+    }
+    await Promise.all(jobs)
+}
 
 const load = async () => {
     loading.value = true; loadError.value = ''
     try {
-        if (!projectId.value || !mockProjects[projectId.value]) throw new Error('未找到对应的保护修复项目')
-        if (!USE_CONSERVATION_MONITORING_MOCK) throw new Error('真实接口尚未接入')
-        project.value = { ...mockProjects[projectId.value], currentStage: 'monitoring', progress: 95 }
-        sources.value = createMonitoringSources(project.value)
-        const stored = JSON.parse(localStorage.getItem(storageKey.value) || 'null')
-        plans.value = stored?.plans?.length ? stored.plans : createMockMonitoringPlans(project.value)
+        if (!projectId.value) throw new Error('缺少保护修复项目ID')
+        const [projectResult, sourceResult, planResult] = await Promise.all([
+            getMonitoringProject(projectId.value),
+            getMonitoringSources(projectId.value),
+            getMonitoringPlans(projectId.value)
+        ])
+        project.value = projectResult.data
+        sources.value = sourceResult.data
+        plans.value = planResult.data || []
+        if (!project.value) throw new Error('未找到对应的保护修复项目')
+        await hydrateProtectedMedia()
         activePlanId.value = Number(route.query.planId) || plans.value[0]?.id
         activeTargetId.value = Number(route.query.targetId) || plan.value?.targets[0]?.id
         activeTaskId.value = Number(route.query.taskId) || plan.value?.tasks.find(x => x.taskStatus === 'in_progress')?.id || plan.value?.tasks[0]?.id
         activeRecordId.value = plan.value?.records.find(x => x.taskId === activeTaskId.value && x.targetId === activeTargetId.value)?.id || null
-        syncSummary(false)
     } catch (error) { loadError.value = error.message || '监测数据加载失败，请稍后重试' }
     finally { loading.value = false }
 }
-const syncSummary = (writeArchive = true) => {
-    const openAlerts = plans.value.reduce((n,p) => n + p.alerts.filter(a => !['resolved','closed','false_alarm'].includes(a.alertStatus)).length, 0)
-    const summary = { plans: plans.value.length, activePlans: plans.value.filter(x => x.planStatus === 'active').length, targets: plans.value.reduce((n,p) => n + p.targets.length, 0), completedTasks: plans.value.reduce((n,p) => n + p.tasks.filter(t => t.taskStatus === 'completed').length, 0), pendingTasks: plans.value.reduce((n,p) => n + p.tasks.filter(t => ['pending','in_progress','overdue'].includes(t.taskStatus)).length, 0), openAlerts, highRiskTargets: plans.value.reduce((n,p) => n + p.targets.filter(t => t.riskLevel === 'high').length, 0), nextMonitoringDate: plans.value.map(x => x.nextMonitoringDate).filter(Boolean).sort()[0] || '', updateTime: new Date().toLocaleString('zh-CN',{hour12:false}) }
-    localStorage.setItem(`conservation-monitoring-summary:${projectId.value}`, JSON.stringify(summary))
-    if (!writeArchive) return
-    const key = `conservation-archive-workbench:${projectId.value}`
-    const data = JSON.parse(localStorage.getItem(key) || 'null') || { archive: createMockArchive(project.value), workspace: createMockArchiveWorkspace(project.value), revisions: [] }
-    data.workspace.monitoringSummary = summary
-    data.workspace.advice.reviewCycle ||= plan.value ? `每${plan.value.defaultFrequencyValue}${plan.value.defaultFrequencyUnit === 'month' ? '个月' : '天'}复查` : ''
-    data.workspace.advice.monitorDiseases ||= plans.value.flatMap(p => p.targets.filter(t => t.targetType === 'disease').map(t => t.targetName)).join('、')
-    data.workspace.advice.monitoringIndicators ||= plans.value.flatMap(p => p.targets.flatMap(t => t.indicators.map(i => i.indicatorName))).filter((x,i,a) => a.indexOf(x) === i).join('、')
-    localStorage.setItem(key, JSON.stringify(data))
-}
 const save = async (show = true) => {
-    saving.value = true; await new Promise(r => setTimeout(r, 160))
-    localStorage.setItem(storageKey.value, JSON.stringify({ plans: plans.value }))
-    syncSummary(); dirty.value = false; saving.value = false
-    if (show) ElMessage.success('监测工作台已保存，并同步总览与保护修复档案')
+    saving.value = true
+    try {
+        const result = await saveMonitoringWorkbench(projectId.value, plans.value)
+        plans.value = result.data || plans.value
+        await hydrateProtectedMedia()
+        dirty.value = false
+        if (show) ElMessage.success('监测工作台已保存到MySQL')
+    } finally {
+        saving.value = false
+    }
 }
 
 const openPlan = sourceMode => {
@@ -101,21 +145,21 @@ const targetFromComparison = (x,id=Date.now()) => {
     const metric = x.metrics?.[0], after = (x.images || x.afterImages || []).find(m => m.imageStage === 'after') || x.afterImages?.[0]
     const sourceId = x.id || x.comparisonId, title = x.comparisonTitle || x.title || '修复后状态监测', part = x.targetPart || x.part
     const afterStatus = x.afterSummary || x.diseases?.map(d => d.afterStatus).filter(Boolean).join('；') || '已建立修复后基准'
-    return { id, targetType: 'disease', targetName: title.replace('灌浆前后对比','后续监测'), sourceBusinessType:'comparison_after', sourceBusinessId:sourceId, targetPart:part, targetLocation:x.monitoring?.reviewPart||part, riskLevel:'high', priorityLevel:'high', monitoringReason:x.evaluation?.remainingIssue||x.monitoring?.notes||'持续观察修复后状态', currentStatus:'基准已建立', requiresImage:true, enabled:true, shootingPosition:x.shootingPosition, baseline:{ id:Date.now()+1, sourceBusinessType:'comparison_after', sourceBusinessId:sourceId, baselineDate:x.evaluationDate||after?.shootingTime?.slice(0,10)||'', baselineStatus:afterStatus, baselineDescription:`${metric?.metricName||'状态'} ${metric?.afterValue??'-'}${metric?.valueUnit||''}`, baselineFileUrl:after?.fileUrl, versionNo:'V1.0', isCurrent:true }, indicators: metric ? [{ id:Date.now()+2, indicatorCode:'IMPORTED-METRIC', indicatorName:metric.metricName, indicatorCategory:metric.metricCategory, dataType:'number', valueUnit:metric.valueUnit, baselineValue:metric.afterValue, normalMin:0, normalMax:Number(metric.afterValue)+.1, warningMax:Number(metric.afterValue)+.2, criticalMax:Number(metric.afterValue)+.5, changeWarningValue:.2, expectedDirection:'stable', observationMethod:'同方法复测', instrumentName:'', required:true }] : [] }
+    return { id, targetType: 'disease', targetName: title.replace('灌浆前后对比','后续监测'), sourceBusinessType:'comparison_after', sourceBusinessId:sourceId, targetPart:part, targetLocation:x.monitoring?.reviewPart||part, riskLevel:'high', priorityLevel:'high', monitoringReason:x.evaluation?.remainingIssue||x.monitoring?.notes||'持续观察修复后状态', currentStatus:'基准已建立', requiresImage:true, enabled:true, shootingPosition:x.shootingPosition, baseline:{ id:Date.now()+1, sourceBusinessType:'comparison_after', sourceBusinessId:sourceId, baselineDate:x.evaluationDate||after?.shootingTime?.slice(0,10)||'', baselineStatus:afterStatus, baselineDescription:`${metric?.metricName||'状态'} ${metric?.afterValue??'-'}${metric?.valueUnit||''}`, baselineMediaId:after?.id||null, baselineFileUrl:after?.fileUrl, versionNo:'V1.0', isCurrent:true }, indicators: metric ? [{ id:Date.now()+2, indicatorCode:'IMPORTED-METRIC', indicatorName:metric.metricName, indicatorCategory:metric.metricCategory, dataType:'number', valueUnit:metric.valueUnit, baselineValue:metric.afterValue, normalMin:0, normalMax:Number(metric.afterValue)+.1, warningMax:Number(metric.afterValue)+.2, criticalMax:Number(metric.afterValue)+.5, changeWarningValue:.2, expectedDirection:'stable', observationMethod:'同方法复测', instrumentName:'', required:true }] : [] }
 }
 const targetFromRestoration = (x,id=Date.now()) => {
     const media = x.media.find(m => m.selectedAsMonitoringBaseline)||x.media.find(m=>m.isPrimary), part=x.parts.find(p=>x.monitoring.partIds.includes(p.id))||x.parts[0]
-    return { id, targetType:'restoration_part', targetName:part?.partName||x.resultName, sourceBusinessType:'restoration_part', sourceBusinessId:part?.id||x.id, targetPart:x.targetPart, targetLocation:part?.targetLocation||x.targetPart, riskLevel:'medium', priorityLevel:'medium', monitoringReason:x.monitoring.note||'实体复原部分长期稳定性监测', currentStatus:'稳定', requiresImage:true, enabled:true, shootingPosition:'固定正视', baseline:{ id:Date.now()+1, sourceBusinessType:'restoration', sourceBusinessId:x.id, baselineDate:x.completionDate, baselineStatus:x.evaluation.finalConclusion, baselineDescription:`完成状态 · ${x.currentVersion}`, baselineFileUrl:media?.fileUrl, versionNo:'V1.0', isCurrent:true }, indicators:[{ id:Date.now()+2, indicatorCode:'RESTORATION-JOINT', indicatorName:(x.monitoring.indicators||'接缝宽度').split('、')[0], indicatorCategory:'structure', dataType:'number', valueUnit:'mm', baselineValue:.8, normalMin:0, normalMax:.9, warningMax:1, criticalMax:1.3, changeWarningValue:.2, expectedDirection:'stable', observationMethod:'接缝宽度测量', instrumentName:'游标卡尺', required:true }] }
+    return { id, targetType:'restoration_part', targetName:part?.partName||x.resultName, sourceBusinessType:'restoration_part', sourceBusinessId:part?.id||x.id, targetPart:x.targetPart, targetLocation:part?.targetLocation||x.targetPart, riskLevel:'medium', priorityLevel:'medium', monitoringReason:x.monitoring.note||'实体复原部分长期稳定性监测', currentStatus:'稳定', requiresImage:true, enabled:true, shootingPosition:'固定正视', baseline:{ id:Date.now()+1, sourceBusinessType:'restoration', sourceBusinessId:x.id, baselineDate:x.completionDate, baselineStatus:x.evaluation.finalConclusion, baselineDescription:`完成状态 · ${x.currentVersion}`, baselineMediaId:media?.id||null, baselineFileUrl:media?.fileUrl, versionNo:'V1.0', isCurrent:true }, indicators:[{ id:Date.now()+2, indicatorCode:'RESTORATION-JOINT', indicatorName:(x.monitoring.indicators||'接缝宽度').split('、')[0], indicatorCategory:'structure', dataType:'number', valueUnit:'mm', baselineValue:.8, normalMin:0, normalMax:.9, warningMax:1, criticalMax:1.3, changeWarningValue:.2, expectedDirection:'stable', observationMethod:'接缝宽度测量', instrumentName:'游标卡尺', required:true }] }
 }
 const importComparison = () => {
     if (!plan.value) return openPlan('comparison')
-    const candidates = (() => { try { return JSON.parse(localStorage.getItem(`conservation-monitoring-baseline:${projectId.value}`)||'null') } catch { return null } })() || sources.value.comparisons
+    const candidates = sources.value.comparisons || []
     let count=0; candidates.forEach(x=>{ if(!plan.value.targets.some(t=>t.sourceBusinessType==='comparison_after'&&t.sourceBusinessId===x.id)){ plan.value.targets.push(targetFromComparison(x)); count++ } })
     if (count) { activeTargetId.value=plan.value.targets.at(-1).id; dirty.value=true; ElMessage.success(`已从前后对比建立 ${count} 个版本化基准`) } else ElMessage.info('已选前后对比基准均已关联')
 }
 const importRestoration = () => {
     if (!plan.value) return openPlan('restoration')
-    const candidates = (() => { try { return JSON.parse(localStorage.getItem(`conservation-restoration-monitoring:${projectId.value}`)||'null') } catch { return null } })() || sources.value.restorations
+    const candidates = sources.value.restorations || []
     let count=0; candidates.forEach(x=>{ if(!plan.value.targets.some(t=>t.sourceBusinessType==='restoration_part'&&t.sourceBusinessId===(x.monitoring?.partIds?.[0]||x.id))){ plan.value.targets.push(targetFromRestoration(x)); count++ } })
     if(count){activeTargetId.value=plan.value.targets.at(-1).id;dirty.value=true;ElMessage.success(`已从复原成果生成 ${count} 个监测对象`)}else ElMessage.info('需要监测的复原成果均已关联')
 }
@@ -167,12 +211,99 @@ const completeTask = async () => {
 }
 const openAlert = item => { handlingAlert.value=item;Object.assign(alertForm,{immediateAction:item.immediateAction||'',treatmentAdvice:item.treatmentAdvice||'',alertStatus:item.alertStatus==='new'?'confirmed':item.alertStatus,requiresRecheck:item.requiresRecheck,requiresDiseaseSurvey:item.requiresDiseaseSurvey,requiresIntervention:item.requiresIntervention,requiresNewProject:item.requiresNewProject});alertDialog.value=true;activeTab.value='alerts';assistDrawer.value=false }
 const saveAlert = () => { Object.assign(handlingAlert.value,alertForm,{confirmedTime:handlingAlert.value.confirmedTime||new Date().toLocaleString('zh-CN',{hour12:false}),confirmedBy:handlingAlert.value.confirmedBy||project.value.principal});alertDialog.value=false;dirty.value=true;ElMessage.success('预警处理状态已更新并保留处理轨迹') }
-const createNewProject = () => ElMessage.info('已预留新保护修复项目创建入口，将携带文物、监测记录、预警和当前影像')
+const uploadMedia = async file => {
+    if (!record.value || !file) return
+    await save(false)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('mediaRole', 'current')
+    form.append('shootingPosition', target.value.shootingPosition || '')
+    form.append('shootingTime', new Date().toISOString().slice(0, 19))
+    form.append('title', `${target.value.targetName}本次监测影像`)
+    form.append('createdBy', record.value.monitorPerson || project.value.principal || '')
+    const result = await uploadMonitoringMedia(record.value.id, form)
+    if (result.data.contentType?.startsWith('image/')) {
+        result.data.fileUrl = await asObjectUrl(() => getMonitoringMediaContent(result.data.id))
+    }
+    record.value.media ||= []
+    record.value.media.push(result.data)
+    ElMessage.success('文件已上传并保存到MySQL')
+}
+const dateAfter = days => {
+    const value = new Date()
+    value.setDate(value.getDate() + days)
+    return value.toISOString().slice(0, 10)
+}
+const createNewProject = item => {
+    const alert = item?.id ? item : handlingAlert.value
+    if (!alert) return ElMessage.warning('请先选择一条监测预警')
+    handlingAlert.value = alert
+    if (alert.createdProjectId) return router.push(`/conservation/project/${alert.createdProjectId}/disease`)
+    if (!alertDialog.value) {
+        Object.assign(alertForm, {
+            immediateAction: alert.immediateAction || '',
+            treatmentAdvice: alert.treatmentAdvice || '',
+            alertStatus: alert.alertStatus === 'new' ? 'confirmed' : alert.alertStatus,
+            requiresRecheck: alert.requiresRecheck,
+            requiresDiseaseSurvey: alert.requiresDiseaseSurvey,
+            requiresIntervention: alert.requiresIntervention,
+            requiresNewProject: true
+        })
+    }
+    alertForm.requiresNewProject = true
+    const artifactLabel = project.value.artifactName || project.value.artifactCode || '文物'
+    Object.assign(projectForm, {
+        projectCode: `CR-ALERT-${alert.id}`,
+        projectName: `${artifactLabel}${alert.alertTitle || '监测异常'}保护修复项目`,
+        projectType: '综合',
+        riskLevel: alert.alertLevel === 'critical' ? 'high' : 'medium',
+        principal: project.value.principal || '',
+        department: project.value.department || '',
+        startDate: new Date().toISOString().slice(0, 10),
+        expectedEndDate: dateAfter(90),
+        summary: alert.treatmentAdvice || alertForm.treatmentAdvice || ''
+    })
+    projectDialog.value = true
+}
+const submitAlertProject = async () => {
+    if (!handlingAlert.value) return
+    if (!projectForm.projectName.trim()) return ElMessage.warning('请填写项目名称')
+    if (!(project.value.artifactName || '').trim()) return ElMessage.warning('来源项目缺少文物名称，请先完善项目信息')
+    creatingProject.value = true
+    const alertId = handlingAlert.value.id
+    try {
+        Object.assign(handlingAlert.value, alertForm, {
+            requiresNewProject: true,
+            confirmedTime: handlingAlert.value.confirmedTime || new Date().toLocaleString('zh-CN', { hour12: false }),
+            confirmedBy: handlingAlert.value.confirmedBy || project.value.principal
+        })
+        dirty.value = true
+        await save(false)
+        const result = await createProjectFromAlert(alertId, { ...projectForm })
+        const created = result.data
+        const persistedAlert = plans.value.flatMap(x => x.alerts || []).find(x => Number(x.id) === Number(alertId))
+        if (persistedAlert) {
+            persistedAlert.createdProjectId = created.id
+            persistedAlert.projectCreatedTime = new Date().toLocaleString('zh-CN', { hour12: false })
+            persistedAlert.requiresNewProject = true
+            if (['new', 'confirmed'].includes(persistedAlert.alertStatus)) persistedAlert.alertStatus = 'processing'
+        }
+        projectDialog.value = false
+        alertDialog.value = false
+        dirty.value = false
+        ElMessage.success(created.alreadyCreated
+            ? `该预警已关联项目：${created.projectName}`
+            : `已创建保护修复项目：${created.projectName}`)
+    } finally {
+        creatingProject.value = false
+    }
+}
 const navigate = (type,id) => {
     const map={archive:`/conservation/project/${projectId.value}/archive?section=advice`,comparison:`/conservation/project/${projectId.value}/comparison?comparisonId=${id||''}`,comparison_after:`/conservation/project/${projectId.value}/comparison?comparisonId=${id||''}`,restoration:`/conservation/project/${projectId.value}/restoration?resultId=${id||''}`,restoration_part:`/conservation/project/${projectId.value}/restoration?resultId=${id||''}`,disease:`/conservation/project/${projectId.value}/disease`,disease_record:`/conservation/project/${projectId.value}/disease`,process_step:`/conservation/project/${projectId.value}/process?stepId=${id||''}`,archive_advice:`/conservation/project/${projectId.value}/archive?section=advice`}
     if(map[type])router.push(map[type])
 }
 onBeforeRouteLeave(async()=>{if(!dirty.value)return true;try{await ElMessageBox.confirm('监测工作台有未保存修改，是否保存后离开？','未保存提示',{confirmButtonText:'保存并离开',cancelButtonText:'直接离开',distinguishCancelAndClose:true});await save(false);return true}catch(e){return e==='cancel'}})
+onBeforeUnmount(() => objectUrls.forEach(url => URL.revokeObjectURL(url)))
 onMounted(load)
 </script>
 
@@ -185,7 +316,7 @@ onMounted(load)
     <div class="mobile-tools"><el-button @click="listDrawer=true">计划与对象</el-button><el-button @click="assistDrawer=true">风险与完整度</el-button></div>
     <div class="layout">
       <MonitoringPlanTargetList class="left" :plans="plans" :active-plan-id="activePlanId" :active-target-id="activeTargetId" @select-plan="selectPlan" @select-target="selectTarget" @add-target="openTarget()"/>
-      <MonitoringWorkspace :plan="plan" :target="target" :task="task" :record="record" v-model:active-tab="activeTab" @dirty="markDirty" @add-target="openTarget()" @generate-task="generateTask" @start-task="startTask" @select-task="selectTask" @create-record="startRecord" @save-record="saveRecord" @submit-record="submitRecord" @complete-task="completeTask" @handle-alert="openAlert" @navigate="navigate"/>
+      <MonitoringWorkspace :plan="plan" :target="target" :task="task" :record="record" v-model:active-tab="activeTab" @dirty="markDirty" @add-target="openTarget()" @generate-task="generateTask" @start-task="startTask" @select-task="selectTask" @create-record="startRecord" @save-record="saveRecord" @submit-record="submitRecord" @complete-task="completeTask" @handle-alert="openAlert" @create-project="createNewProject" @upload-media="uploadMedia" @navigate="navigate"/>
       <MonitoringAssistPanel class="right" :plan="plan" :target="target" :record="record" :missing="missing" :completeness="completeness" @focus="activeTab=$event" @navigate="navigate" @handle-alert="openAlert"/>
     </div>
   </template>
@@ -206,7 +337,27 @@ onMounted(load)
 
   <el-dialog v-model="targetDialog" :title="targetForm.id?'编辑监测对象':'新增监测对象'" width="min(700px,95vw)"><el-form label-position="top"><div class="form-grid"><el-form-item label="对象名称"><el-input v-model="targetForm.targetName"/></el-form-item><el-form-item label="对象类型"><el-select v-model="targetForm.targetType"><el-option label="病害" value="disease"/><el-option label="修复部位" value="repair_part"/><el-option label="复原补配" value="restoration_part"/><el-option label="保存环境" value="environment"/><el-option label="文物整体" value="artifact"/></el-select></el-form-item><el-form-item label="目标部位"><el-input v-model="targetForm.targetPart"/></el-form-item><el-form-item label="具体位置"><el-input v-model="targetForm.targetLocation"/></el-form-item><el-form-item label="风险等级"><el-select v-model="targetForm.riskLevel"><el-option label="高" value="high"/><el-option label="中" value="medium"/><el-option label="低" value="low"/></el-select></el-form-item><el-form-item label="固定拍摄机位"><el-input v-model="targetForm.shootingPosition"/></el-form-item><el-form-item class="wide" label="监测原因"><el-input v-model="targetForm.monitoringReason" type="textarea"/></el-form-item><el-form-item label="要求影像"><el-switch v-model="targetForm.requiresImage"/></el-form-item><el-form-item label="启用"><el-switch v-model="targetForm.enabled"/></el-form-item></div></el-form><template #footer><el-button @click="targetDialog=false">取消</el-button><el-button type="primary" @click="saveTarget">保存对象</el-button></template></el-dialog>
 
-  <el-dialog v-model="alertDialog" title="预警确认与处理" width="min(680px,95vw)"><div v-if="handlingAlert" class="alert-detail"><el-alert :title="handlingAlert.alertTitle" :description="handlingAlert.alertDescription" type="warning" :closable="false"/><p>触发条件：{{ handlingAlert.thresholdDescription }}</p></div><el-form label-position="top"><el-form-item label="处理状态"><el-select v-model="alertForm.alertStatus"><el-option label="已确认" value="confirmed"/><el-option label="处理中" value="processing"/><el-option label="已解决" value="resolved"/><el-option label="已关闭" value="closed"/><el-option label="误报" value="false_alarm"/></el-select></el-form-item><el-form-item label="即时措施"><el-input v-model="alertForm.immediateAction" type="textarea"/></el-form-item><el-form-item label="处理建议"><el-input v-model="alertForm.treatmentAdvice" type="textarea"/></el-form-item><div class="checks"><el-checkbox v-model="alertForm.requiresRecheck">需要复测</el-checkbox><el-checkbox v-model="alertForm.requiresDiseaseSurvey">建立病害调查</el-checkbox><el-checkbox v-model="alertForm.requiresIntervention">需要再次干预</el-checkbox><el-checkbox v-model="alertForm.requiresNewProject">建议新项目</el-checkbox></div></el-form><template #footer><el-button v-if="alertForm.requiresDiseaseSurvey" @click="navigate('disease')">前往病害调查</el-button><el-button v-if="alertForm.requiresNewProject" @click="createNewProject">创建新项目（占位）</el-button><el-button type="primary" @click="saveAlert">保存处理</el-button></template></el-dialog>
+  <el-dialog v-model="alertDialog" title="预警确认与处理" width="min(680px,95vw)"><div v-if="handlingAlert" class="alert-detail"><el-alert :title="handlingAlert.alertTitle" :description="handlingAlert.alertDescription" type="warning" :closable="false"/><p>触发条件：{{ handlingAlert.thresholdDescription }}</p></div><el-form label-position="top"><el-form-item label="处理状态"><el-select v-model="alertForm.alertStatus"><el-option label="已确认" value="confirmed"/><el-option label="处理中" value="processing"/><el-option label="已解决" value="resolved"/><el-option label="已关闭" value="closed"/><el-option label="误报" value="false_alarm"/></el-select></el-form-item><el-form-item label="即时措施"><el-input v-model="alertForm.immediateAction" type="textarea"/></el-form-item><el-form-item label="处理建议"><el-input v-model="alertForm.treatmentAdvice" type="textarea"/></el-form-item><div class="checks"><el-checkbox v-model="alertForm.requiresRecheck">需要复测</el-checkbox><el-checkbox v-model="alertForm.requiresDiseaseSurvey">建立病害调查</el-checkbox><el-checkbox v-model="alertForm.requiresIntervention">需要再次干预</el-checkbox><el-checkbox v-model="alertForm.requiresNewProject">建议新项目</el-checkbox></div></el-form><template #footer><el-button v-if="alertForm.requiresDiseaseSurvey" @click="navigate('disease')">前往病害调查</el-button><el-button v-if="alertForm.requiresNewProject" @click="createNewProject(handlingAlert)">{{ handlingAlert?.createdProjectId ? '进入已创建项目' : '创建新保护修复项目' }}</el-button><el-button type="primary" @click="saveAlert">保存处理</el-button></template></el-dialog>
+
+  <el-dialog v-model="projectDialog" title="从监测预警创建保护修复项目" width="min(760px,96vw)" :close-on-click-modal="false">
+    <el-alert v-if="handlingAlert" :title="handlingAlert.alertTitle" :description="`来源预警：${handlingAlert.alertCode}；${handlingAlert.alertDescription || ''}`" type="warning" :closable="false"/>
+    <el-form label-position="top" class="alert-project-form">
+      <div class="form-grid">
+        <el-form-item label="文物名称"><el-input :model-value="project.artifactName" disabled/></el-form-item>
+        <el-form-item label="文物编号"><el-input :model-value="project.artifactCode || '未填写'" disabled/></el-form-item>
+        <el-form-item label="项目编号"><el-input v-model="projectForm.projectCode"/></el-form-item>
+        <el-form-item label="项目名称" required><el-input v-model="projectForm.projectName"/></el-form-item>
+        <el-form-item label="项目类型"><el-select v-model="projectForm.projectType"><el-option label="保护" value="保护"/><el-option label="修复" value="修复"/><el-option label="复原" value="复原"/><el-option label="综合" value="综合"/></el-select></el-form-item>
+        <el-form-item label="风险等级"><el-select v-model="projectForm.riskLevel"><el-option label="高风险" value="high"/><el-option label="中风险" value="medium"/><el-option label="低风险" value="low"/></el-select></el-form-item>
+        <el-form-item label="负责人"><el-input v-model="projectForm.principal"/></el-form-item>
+        <el-form-item label="执行部门"><el-input v-model="projectForm.department"/></el-form-item>
+        <el-form-item label="开始日期"><el-date-picker v-model="projectForm.startDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
+        <el-form-item label="预计完成"><el-date-picker v-model="projectForm.expectedEndDate" type="date" value-format="YYYY-MM-DD"/></el-form-item>
+        <el-form-item class="wide" label="补充摘要"><el-input v-model="projectForm.summary" type="textarea" :rows="3" placeholder="系统会自动附加来源项目、预警、监测对象、触发阈值和处理建议"/></el-form-item>
+      </div>
+    </el-form>
+    <template #footer><el-button @click="projectDialog=false">取消</el-button><el-button type="primary" :loading="creatingProject" @click="submitAlertProject">创建项目</el-button></template>
+  </el-dialog>
 </div>
 </template>
 

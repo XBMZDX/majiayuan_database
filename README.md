@@ -130,6 +130,10 @@ npm run dev
 | 仪器 | `lab_instruments` | 检测仪器表 |
 | 分析 | `analysis_results` | 分析结果表 |
 | 实验 | `experiment_results` | 实验结果表 |
+| 修复 | `conservation_project` | 保护修复项目表 |
+| 修复 | `conservation_disease_type` | 病害类型字典表 |
+| 修复 | `conservation_disease_survey` | 病害调查主表 |
+| 修复 | `conservation_disease_record` | 病害明细记录表 |
 
 ## 配置说明
 

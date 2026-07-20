@@ -7,15 +7,12 @@ import ProcessSummaryBar from './components/process/ProcessSummaryBar.vue'
 import ProcessStepList from './components/process/ProcessStepList.vue'
 import ProcessStepPaper from './components/process/ProcessStepPaper.vue'
 import ProcessAssistPanel from './components/process/ProcessAssistPanel.vue'
-import { USE_CONSERVATION_PROCESS_MOCK } from '@/api/conservationProcess'
-import { mockProjects } from './archiveMock'
 import {
-    createEmptyFormalSteps,
-    createMockProcess,
-    createMockProcessContext,
-    createMockProcessSteps,
-    createProcessRecordFromPlan
-} from './processMock'
+    createProcess as createProcessApi,
+    generateProcessSteps,
+    getProcessWorkbench,
+    saveProcessWorkbench
+} from '@/api/conservationProcess'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,7 +48,6 @@ const pauseForm = reactive({ reason: '', pauseTime: '', artifactState: '', prote
 const resumeForm = reactive({ resumeTime: '', operator: '', preCheck: '', artifactState: '', canContinue: true })
 const skipReason = ref('')
 
-const storageKey = computed(() => `conservation-process-workbench:${projectId.value}`)
 const activeStep = computed(() => steps.value.find(item => item.id === activeStepId.value) || null)
 const activeIndex = computed(() => steps.value.findIndex(item => item.id === activeStepId.value))
 const previousStep = computed(() => activeIndex.value > 0 ? steps.value[activeIndex.value - 1] : null)
@@ -118,7 +114,7 @@ const stepDifferences = computed(() => {
         levelText: level === 'major' ? '重大偏差' : level === 'general' ? '一般偏差' : '轻微偏差'
     })
     if (step.temporaryStep && step.requiresPlanChange) {
-        add('temporary-plan-change', '临时步骤需要变更方案', step.temporaryReason || '待补充临时步骤原因', 'major')
+        add('temporary-plan-change', '临时步骤已登记方案调整', step.temporaryReason || '待补充临时步骤原因', 'major')
     }
     if (step.deviationFlag) add('method', '实际方法与计划不同', step.deviationReason || '待填写偏差原因', step.deviationLevel || 'general')
     step.materials.filter(item => item.deviationFlag).forEach(item => add(
@@ -145,43 +141,22 @@ const stepProblems = computed(() => {
     }
 })
 
+const applyWorkbench = data => {
+    project.value = data?.project || null
+    archive.value = data?.archive || null
+    archiveWorkspace.value = data?.archiveWorkspace || null
+    formalPlan.value = data?.formalPlan || null
+    processRecord.value = data?.processRecord || null
+    steps.value = data?.steps || []
+}
+
 const loadPage = async () => {
     loading.value = true
     loadError.value = ''
     try {
-        await new Promise(resolve => setTimeout(resolve, 350))
-        if (!projectId.value || !mockProjects[projectId.value]) {
-            project.value = null
-            return
-        }
-        if (!USE_CONSERVATION_PROCESS_MOCK) throw new Error('真实修复过程接口尚未启用，请保持 Mock 模式。')
-        project.value = structuredClone(mockProjects[projectId.value])
-
-        if (projectId.value === 5) {
-            archive.value = archiveWorkspace.value = formalPlan.value = null
-            processRecord.value = null
-            steps.value = []
-            return
-        }
-
-        const context = createMockProcessContext(project.value)
-        archive.value = context.archive
-        archiveWorkspace.value = context.archiveWorkspace
-        formalPlan.value = context.formalPlan
-        if (projectId.value === 3) formalPlan.value.planStatus = 'draft'
-
-        const saved = localStorage.getItem(storageKey.value)
-        if (saved) {
-            const data = JSON.parse(saved)
-            processRecord.value = data.processRecord
-            steps.value = data.steps || []
-        } else if (projectId.value === 1) {
-            processRecord.value = createMockProcess(project.value)
-            steps.value = createMockProcessSteps(project.value)
-        } else {
-            processRecord.value = null
-            steps.value = []
-        }
+        if (!projectId.value) throw new Error('缺少保护修复项目ID')
+        const result = await getProcessWorkbench(projectId.value)
+        applyWorkbench(result.data)
         recalculateAll()
         const requestedStepId = Number(route.query.stepId)
         activeStepId.value = steps.value.find(item => item.id === requestedStepId)?.id
@@ -199,89 +174,37 @@ const loadPage = async () => {
 }
 
 const generateProcess = async () => {
-    if (!formalPlan.value || !['submitted', 'approved', 'reviewed'].includes(formalPlan.value.planStatus)) return
+    if (!formalPlan.value || formalPlan.value.planStatus !== 'completed') return
     loading.value = true
     try {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        processRecord.value = createProcessRecordFromPlan(project.value)
-        steps.value = createEmptyFormalSteps(project.value)
-        processRecord.value.totalSteps = steps.value.length
+        const result = await createProcessApi(projectId.value)
+        applyWorkbench(result.data)
         activeStepId.value = steps.value[0]?.id
-        dirty.value = true
+        dirty.value = false
         recalculateAll()
         ElMessage.success(`已从正式方案生成${steps.value.length}个修复执行步骤`)
+    } catch (error) {
+        ElMessage.error(error.message || '生成修复过程失败')
     } finally {
         loading.value = false
     }
-}
-
-const persistProcess = () => localStorage.setItem(storageKey.value, JSON.stringify({
-    processRecord: processRecord.value,
-    steps: steps.value
-}))
-
-const syncLinkedSummaries = () => {
-    const archiveKey = `conservation-archive-workbench:${projectId.value}`
-    let linkedArchive
-    try {
-        linkedArchive = JSON.parse(localStorage.getItem(archiveKey) || 'null')
-    } catch {
-        linkedArchive = null
-    }
-    linkedArchive ||= {
-        archive: archive.value,
-        workspace: archiveWorkspace.value,
-        revisions: []
-    }
-    linkedArchive.workspace ||= archiveWorkspace.value || {}
-    linkedArchive.workspace.processSummary = {
-        planned: processRecord.value.totalSteps,
-        completed: completedSteps.value,
-        processing: steps.value.filter(item => item.stepStatus === 'in_progress').length,
-        pending: steps.value.filter(item => item.stepStatus === 'pending').length,
-        progress: processProgress.value,
-        processStatus: processRecord.value.processStatus,
-        steps: steps.value.map(item => ({
-            id: item.id,
-            name: item.stepName,
-            status: item.stepStatus,
-            completeness: item.completionRate,
-            operator: item.operatorName,
-            startTime: item.actualStartTime,
-            endTime: item.actualEndTime
-        }))
-    }
-    localStorage.setItem(archiveKey, JSON.stringify(linkedArchive))
-
-    localStorage.setItem(`conservation-project-summary:${projectId.value}`, JSON.stringify({
-        projectId: projectId.value,
-        currentStage: processRecord.value.currentStage,
-        currentStepId: activeStepId.value,
-        processStatus: processRecord.value.processStatus,
-        processProgress: processProgress.value,
-        completedSteps: completedSteps.value,
-        totalSteps: processRecord.value.totalSteps,
-        unresolvedIssues: unresolvedIssues.value,
-        updateTime: processRecord.value.updateTime
-    }))
 }
 
 const saveCurrentStep = async (showMessage = true) => {
     if (!processRecord.value || !activeStep.value) return
     saving.value = true
     try {
-        await new Promise(resolve => setTimeout(resolve, 260))
         recalculateAll()
         processRecord.value.progress = processProgress.value
         processRecord.value.completedSteps = completedSteps.value
-        processRecord.value.updateTime = new Date().toLocaleString('zh-CN', { hour12: false })
-        // Mock模式以浏览器存储模拟分表保存；真实接口由 conservationProcess.js 分资源提交。
-        persistProcess()
-        syncLinkedSummaries()
+        const currentId = activeStepId.value
+        const result = await saveProcessWorkbench(processRecord.value.id, processRecord.value, steps.value)
+        applyWorkbench(result.data)
+        activeStepId.value = steps.value.find(item => item.id === currentId)?.id || steps.value[0]?.id
         dirty.value = false
         if (showMessage) ElMessage.success(`当前步骤已保存：${processRecord.value.updateTime}`)
-    } catch {
-        ElMessage.error('保存失败，请稍后重试')
+    } catch (error) {
+        ElMessage.error(error.message || '保存失败，请稍后重试')
     } finally {
         saving.value = false
     }
@@ -423,7 +346,7 @@ const openTempStep = (parent = null) => {
     tempStepDialog.value = true
 }
 
-const createTempStep = () => {
+const createTempStep = async () => {
     if (!tempStepForm.stepName || !tempStepForm.temporaryReason || !tempStepForm.plannedMethod) return ElMessage.warning('请填写步骤名称、新增原因和计划方法')
     const insertIndex = steps.value.findIndex(item => item.id === tempStepForm.insertAfterId)
     const selectedDiseases = archiveWorkspace.value.diseaseRecords
@@ -463,7 +386,8 @@ const createTempStep = () => {
     tempStepDialog.value = false
     dirty.value = true
     recalculateAll()
-    ElMessage.success('临时步骤已添加')
+    await saveCurrentStep(false)
+    ElMessage.success('临时步骤已添加并保存')
 }
 
 const moveStep = (id, direction) => {
@@ -512,12 +436,13 @@ const confirmSkip = () => {
 
 const syncFromPlan = async () => {
     if (processRecord.value.processStatus !== 'not_started') {
-        return ElMessage.info('过程已正式开始，仅可新增临时步骤；重大调整请申请方案变更。')
+        return ElMessage.info('过程已开始，可直接修改正式方案；为保留历史记录，已开始的执行步骤不会自动重建。')
     }
     await ElMessageBox.confirm('重新同步会用正式方案重新生成尚未执行的步骤，是否继续？', '同步正式方案', { type: 'warning' })
-    steps.value = createEmptyFormalSteps(project.value)
+    const result = await generateProcessSteps(processRecord.value.id)
+    applyWorkbench(result.data)
     activeStepId.value = steps.value[0]?.id
-    dirty.value = true
+    dirty.value = false
     recalculateAll()
     ElMessage.success('已重新同步正式方案')
 }
@@ -535,7 +460,7 @@ const navigate = async target => {
     const routes = {
         archive: `/conservation/project/${projectId.value}/archive`,
         plan: `/conservation/project/${projectId.value}/archive?section=plan`,
-        'plan-change': `/conservation/project/${projectId.value}/archive?section=plan&sourceStepId=${activeStepId.value}`,
+        'plan-edit': `/conservation/project/${projectId.value}/archive?section=plan&sourceStepId=${activeStepId.value}&mode=direct`,
         disease: `/conservation/project/${projectId.value}/disease`,
         'new-disease': `/conservation/project/${projectId.value}/disease?sourceStepId=${activeStepId.value}`
     }
@@ -590,7 +515,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
             <template #extra><el-button type="primary" :icon="Document" @click="router.push(`/conservation/project/${projectId}/archive`)">前往保护修复档案</el-button></template>
         </el-result>
 
-        <el-result v-else-if="!formalPlan || !['submitted','approved','reviewed'].includes(formalPlan.planStatus)" icon="warning" title="当前档案尚未提交正式保护修复方案" sub-title="修复过程只能读取已提交、已审核或已批准的正式方案。">
+        <el-result v-else-if="!formalPlan || formalPlan.planStatus!=='completed'" icon="warning" title="当前档案尚未完成保护修复方案" sub-title="请先在保护修复档案中完善方案并将方案状态设为“已完成”。">
             <template #extra><el-button type="primary" @click="router.push(`/conservation/project/${projectId}/archive?section=plan`)">前往编制方案</el-button></template>
         </el-result>
 
@@ -671,7 +596,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                         @disease="navigate('disease')"
                         @previous="previousStep && selectStep(previousStep.id)"
                         @next="nextStep && selectStep(nextStep.id)"
-                        @plan-change="navigate('plan-change')"
+                        @plan-edit="navigate('plan-edit')"
                         @close="assistOpen = false"
                     />
                 </div>
@@ -694,7 +619,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
             </el-drawer>
 
             <el-dialog v-model="tempStepDialog" title="新增临时修复步骤" width="760px">
-                <el-alert title="过程开始后新增的步骤必须标记为临时新增；重大变更应申请修改正式方案。" type="warning" :closable="false" />
+                <el-alert title="过程开始后新增的步骤将作为临时步骤保存；如需调整正式方案，可直接修改，无需申请或审批。" type="info" :closable="false" />
                 <el-form label-position="top" class="dialog-grid">
                     <el-form-item label="步骤名称"><el-input v-model="tempStepForm.stepName" /></el-form-item>
                     <el-form-item label="步骤类型"><el-select v-model="tempStepForm.stepType"><el-option v-for="item in ['documentation','cleaning','stabilization','desalination','rust_removal','consolidation','correction','bonding','filling','grouting','anchoring','coloring','surface_finish','restoration','evaluation','other']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
@@ -707,7 +632,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                     <el-form-item label="操作人员"><el-input v-model="tempStepForm.operatorName" /></el-form-item>
                     <el-form-item label="步骤权重"><el-input-number v-model="tempStepForm.progressWeight" :min="1" :max="100" /></el-form-item>
                     <el-form-item label="插入位置"><el-select v-model="tempStepForm.insertAfterId"><el-option v-for="item in steps" :key="item.id" :label="`在 ${item.stepName} 之后`" :value="item.id" /></el-select></el-form-item>
-                    <el-form-item><el-checkbox v-model="tempStepForm.requiresPlanChange">需要方案变更</el-checkbox><el-checkbox v-model="tempStepForm.requiresQualityCheck">要求质量检查</el-checkbox><el-checkbox v-model="tempStepForm.requiresMedia">要求前中后影像</el-checkbox></el-form-item>
+                    <el-form-item><el-checkbox v-model="tempStepForm.requiresPlanChange">纳入方案调整统计</el-checkbox><el-checkbox v-model="tempStepForm.requiresQualityCheck">要求质量检查</el-checkbox><el-checkbox v-model="tempStepForm.requiresMedia">要求前中后影像</el-checkbox></el-form-item>
                 </el-form>
                 <template #footer><el-button @click="tempStepDialog=false">取消</el-button><el-button type="primary" @click="createTempStep">添加步骤</el-button></template>
             </el-dialog>

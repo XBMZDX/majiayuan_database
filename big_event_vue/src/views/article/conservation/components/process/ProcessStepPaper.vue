@@ -2,6 +2,11 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
+import {
+    deleteProcessMedia,
+    getProcessMediaContent,
+    uploadProcessMedia
+} from '@/api/conservationProcess'
 
 const props = defineProps({
     step: { type: Object, required: true },
@@ -173,27 +178,62 @@ const saveEnvironment = () => {
 }
 
 const mediaDialog = ref(false)
+const mediaFile = ref(null)
+const mediaUploading = ref(false)
 const mediaForm = reactive({
-    mediaStage: 'before', fileName: '', title: '', shootingTime: '', shootingPosition: '',
+    mediaStage: 'before', title: '', shootingTime: '', shootingPosition: '',
     targetPart: '', photographer: '', description: '', selectedForComparison: false,
     selectedForArchive: false, selectedForRestoration: false
 })
 const openMedia = (stage = 'before', row = null) => {
     editingId.value = row?.id || null
+    mediaFile.value = null
     Object.assign(mediaForm, row || {
-        mediaStage: stage, fileName: '', title: '', shootingTime: new Date().toLocaleString('zh-CN', { hour12: false }),
+        mediaStage: stage, title: '', shootingTime: new Date().toLocaleString('zh-CN', { hour12: false }),
         shootingPosition: '', targetPart: props.step.targetPart, photographer: props.step.operatorName,
         description: '', selectedForComparison: false, selectedForArchive: true, selectedForRestoration: false
     })
     mediaDialog.value = true
 }
-const saveMedia = () => {
-    if (!mediaForm.fileName || !mediaForm.title || !mediaForm.photographer) return ElMessage.warning('请填写文件名称、标题和摄影人')
+const selectMediaFile = uploadFile => {
+    mediaFile.value = uploadFile.raw
+}
+const saveMedia = async () => {
+    if (!mediaForm.title || !mediaForm.photographer) return ElMessage.warning('请填写标题和摄影人')
     if (editingId.value) {
         const index = props.step.media.findIndex(item => item.id === editingId.value)
         if (index >= 0) props.step.media[index] = { ...props.step.media[index], ...mediaForm }
-    } else props.step.media.push({ ...mediaForm, id: Date.now() })
-    mediaDialog.value = false; markDirty()
+        mediaDialog.value = false
+        markDirty()
+        return
+    }
+    if (!mediaFile.value) return ElMessage.warning('请选择需要上传的图片或视频')
+    mediaUploading.value = true
+    try {
+        const form = new FormData()
+        form.append('file', mediaFile.value)
+        Object.entries(mediaForm).forEach(([key, value]) => form.append(key, value ?? ''))
+        const result = await uploadProcessMedia(props.step.id, form)
+        props.step.media.push(result.data)
+        mediaDialog.value = false
+        ElMessage.success('过程影像已上传到MySQL')
+        emit('recalculate')
+    } finally {
+        mediaUploading.value = false
+    }
+}
+const removeMedia = async item => {
+    await ElMessageBox.confirm(`确认删除影像“${item.fileName}”吗？`, '删除影像', { type: 'warning' })
+    await deleteProcessMedia(item.id)
+    props.step.media = props.step.media.filter(row => row.id !== item.id)
+    emit('recalculate')
+    ElMessage.success('影像已删除')
+}
+const previewMedia = async item => {
+    const response = await getProcessMediaContent(item.id)
+    const url = URL.createObjectURL(response.data)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 const groupedMedia = computed(() => Object.keys(mediaStageMap).reduce((result, stage) => {
     result[stage] = props.step.media.filter(item => item.mediaStage === stage)
@@ -394,7 +434,11 @@ watch(() => props.step.id, () => {
                                 <el-tag v-if="item.selectedForArchive" type="success" size="small">正式档案</el-tag>
                                 <el-tag v-if="item.selectedForRestoration" type="warning" size="small">复原成果</el-tag>
                             </div>
-                            <div v-if="!readOnly" class="media-actions"><el-button link @click="openMedia(stage,item)">编辑</el-button><el-button link type="danger" @click="removeItem('media',item)">删除</el-button></div>
+                            <div class="media-actions">
+                                <el-button link type="primary" @click="previewMedia(item)">预览</el-button>
+                                <el-button v-if="!readOnly" link @click="openMedia(stage,item)">编辑</el-button>
+                                <el-button v-if="!readOnly" link type="danger" @click="removeMedia(item)">删除</el-button>
+                            </div>
                         </div>
                     </div>
                     <el-empty v-if="!groupedMedia[stage]?.length" :description="`暂无${label}影像`" :image-size="55"><el-button v-if="!readOnly" type="primary" plain @click="openMedia(stage)">添加{{ label }}影像</el-button></el-empty>
@@ -404,14 +448,20 @@ watch(() => props.step.id, () => {
 
         <!-- 07 异常 -->
         <section id="process-section-issues">
-            <div class="section-heading"><div><span>07</span><h3>问题、异常和方案调整</h3><p>重大偏差通过申请变更处理，不直接覆盖正式方案。</p></div><el-button v-if="!readOnly" type="primary" :icon="Plus" @click="openIssue()">新增异常</el-button></div>
+            <div class="section-heading">
+                <div><span>07</span><h3>问题、异常和方案调整</h3><p>方案调整仅作信息记录，可直接修改正式方案，无需申请或审批。</p></div>
+                <div class="heading-actions">
+                    <el-button type="primary" plain @click="$emit('navigate','plan-edit')">直接修改正式方案</el-button>
+                    <el-button v-if="!readOnly" type="primary" :icon="Plus" @click="openIssue()">新增异常</el-button>
+                </div>
+            </div>
             <div v-for="item in step.issues" :key="item.id" class="issue-row">
                 <div><el-tag :type="item.severity === 'high' || item.severity === 'critical' ? 'danger' : item.severity === 'medium' ? 'warning' : 'info'" size="small">{{ item.severity }}</el-tag><b>{{ item.issueTitle }}</b><el-tag size="small" effect="plain">{{ item.issueStatus }}</el-tag></div>
                 <p>{{ item.issueDescription }}</p>
                 <dl><span>发现：{{ item.discoveredTime }} · {{ item.discoveredBy }}</span><span>临时处理：{{ item.immediateAction || '-' }}</span><span>解决方案：{{ item.solution || '待处理' }}</span></dl>
-                <div class="issue-flags"><el-tag v-if="item.requiresPlanChange" type="danger">需要方案变更</el-tag><el-tag v-if="item.requiresNewDiseaseRecord" type="warning">新发现病害</el-tag><el-tag v-if="item.requiresRework" type="danger">需要返工</el-tag></div>
+                <div class="issue-flags"><el-tag v-if="item.requiresPlanChange" type="warning">已登记方案调整</el-tag><el-tag v-if="item.requiresNewDiseaseRecord" type="warning">新发现病害</el-tag><el-tag v-if="item.requiresRework" type="danger">需要返工</el-tag></div>
                 <div class="row-actions">
-                    <el-button v-if="item.requiresPlanChange" link type="danger" @click="$emit('navigate','plan-change')">申请方案变更</el-button>
+                    <el-button v-if="item.requiresPlanChange" link type="primary" @click="$emit('navigate','plan-edit')">修改正式方案</el-button>
                     <el-button v-if="item.requiresNewDiseaseRecord" link type="warning" @click="$emit('navigate','new-disease')">前往新增病害</el-button>
                     <template v-if="!readOnly"><el-button link type="primary" @click="openIssue(item)">编辑/处理</el-button><el-button v-if="!['resolved','closed'].includes(item.issueStatus)" link type="success" @click="resolveIssue(item)">标记解决</el-button></template>
                 </div>
@@ -490,7 +540,7 @@ watch(() => props.step.id, () => {
                 <el-form-item v-if="materialForm.deviationFlag" label="偏差原因" class="span-2"><el-input v-model="materialForm.deviationReason" type="textarea" /></el-form-item>
                 <el-form-item v-if="materialForm.temporaryMaterial" label="临时材料原因" class="span-2"><el-input v-model="materialForm.temporaryReason" type="textarea" /></el-form-item>
                 <el-form-item label="安全说明"><el-input v-model="materialForm.safetyNote" type="textarea" /></el-form-item><el-form-item label="结果说明"><el-input v-model="materialForm.resultNote" type="textarea" /></el-form-item>
-                <el-form-item v-if="materialForm.temporaryMaterial" label="是否需要方案变更"><el-switch v-model="materialForm.requiresPlanChange" /></el-form-item>
+                <el-form-item v-if="materialForm.temporaryMaterial" label="纳入方案调整统计"><el-switch v-model="materialForm.requiresPlanChange" /></el-form-item>
             </el-form><template #footer><el-button @click="materialDialog=false">取消</el-button><el-button type="primary" @click="saveMaterial">保存</el-button></template>
         </el-dialog>
 
@@ -516,13 +566,19 @@ watch(() => props.step.id, () => {
             <el-form-item label="说明"><el-input v-model="environmentForm.description" /></el-form-item>
         </el-form><template #footer><el-button @click="environmentDialog=false">取消</el-button><el-button type="primary" @click="saveEnvironment">保存</el-button></template></el-dialog>
 
-        <el-dialog v-model="mediaDialog" title="操作影像（Mock上传）" width="680px"><el-form label-position="top" class="form-grid">
-            <el-form-item label="影像阶段"><el-select v-model="mediaForm.mediaStage"><el-option v-for="(label,key) in mediaStageMap" :key="key" :label="label" :value="key" /></el-select></el-form-item><el-form-item label="文件名称"><el-input v-model="mediaForm.fileName" /></el-form-item>
+        <el-dialog v-model="mediaDialog" :title="editingId ? '编辑操作影像' : '上传操作影像'" width="680px"><el-form label-position="top" class="form-grid">
+            <el-form-item v-if="!editingId" label="选择文件" class="span-2">
+                <el-upload :auto-upload="false" :limit="1" accept="image/*,video/*" :on-change="selectMediaFile">
+                    <el-button :icon="Upload">选择图片或视频</el-button>
+                    <template #tip><div class="el-upload__tip">单个文件不超过50MB，文件内容将保存到MySQL。</div></template>
+                </el-upload>
+            </el-form-item>
+            <el-form-item label="影像阶段"><el-select v-model="mediaForm.mediaStage"><el-option v-for="(label,key) in mediaStageMap" :key="key" :label="label" :value="key" /></el-select></el-form-item>
             <el-form-item label="标题"><el-input v-model="mediaForm.title" /></el-form-item><el-form-item label="拍摄时间"><el-input v-model="mediaForm.shootingTime" /></el-form-item>
             <el-form-item label="拍摄角度"><el-input v-model="mediaForm.shootingPosition" /></el-form-item><el-form-item label="拍摄部位"><el-input v-model="mediaForm.targetPart" /></el-form-item>
             <el-form-item label="摄影人"><el-input v-model="mediaForm.photographer" /></el-form-item><el-form-item label="图片说明"><el-input v-model="mediaForm.description" /></el-form-item>
             <el-form-item class="span-2"><el-checkbox v-model="mediaForm.selectedForComparison">加入修复前后对比</el-checkbox><el-checkbox v-model="mediaForm.selectedForArchive">收入正式档案</el-checkbox><el-checkbox v-model="mediaForm.selectedForRestoration">用于复原成果</el-checkbox></el-form-item>
-        </el-form><template #footer><el-button @click="mediaDialog=false">取消</el-button><el-button type="primary" @click="saveMedia">保存影像</el-button></template></el-dialog>
+        </el-form><template #footer><el-button @click="mediaDialog=false">取消</el-button><el-button type="primary" :loading="mediaUploading" @click="saveMedia">{{ editingId ? '保存修改' : '上传影像' }}</el-button></template></el-dialog>
 
         <el-dialog v-model="issueDialog" title="问题与异常" width="720px"><el-form label-position="top" class="form-grid">
             <el-form-item label="异常类型"><el-select v-model="issueForm.issueType"><el-option v-for="item in ['material','tool','environment','artifact_state','new_disease','process','safety','other']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
@@ -531,7 +587,7 @@ watch(() => props.step.id, () => {
             <el-form-item label="发现时间"><el-input v-model="issueForm.discoveredTime" /></el-form-item><el-form-item label="发现人"><el-input v-model="issueForm.discoveredBy" /></el-form-item>
             <el-form-item label="临时处理"><el-input v-model="issueForm.immediateAction" type="textarea" /></el-form-item><el-form-item label="最终解决方案"><el-input v-model="issueForm.solution" type="textarea" /></el-form-item>
             <el-form-item label="当前状态"><el-select v-model="issueForm.issueStatus"><el-option label="待处理" value="open" /><el-option label="处理中" value="processing" /><el-option label="已解决" value="resolved" /><el-option label="已关闭" value="closed" /></el-select></el-form-item>
-            <el-form-item><el-checkbox v-model="issueForm.requiresPlanChange">需要方案变更</el-checkbox><el-checkbox v-model="issueForm.requiresNewDiseaseRecord">发现新病害</el-checkbox><el-checkbox v-model="issueForm.requiresRework">需要返工</el-checkbox></el-form-item>
+            <el-form-item><el-checkbox v-model="issueForm.requiresPlanChange">纳入方案调整统计</el-checkbox><el-checkbox v-model="issueForm.requiresNewDiseaseRecord">发现新病害</el-checkbox><el-checkbox v-model="issueForm.requiresRework">需要返工</el-checkbox></el-form-item>
         </el-form><template #footer><el-button @click="issueDialog=false">取消</el-button><el-button type="primary" @click="saveIssue">保存</el-button></template></el-dialog>
 
         <el-dialog v-model="checkDialog" title="质量检查" width="680px"><el-form label-position="top" class="form-grid">

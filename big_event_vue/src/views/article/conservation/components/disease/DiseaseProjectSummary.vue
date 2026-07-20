@@ -12,8 +12,8 @@ const riskTag = computed(() => {
     return { type: m[props.project?.riskLevel] || 'info', text: t[props.project?.riskLevel] || '-' }
 })
 const statusTag = computed(() => {
-    const m = { draft: 'info', submitted: 'warning', reviewed: 'success', returned: 'danger' }
-    const t = { draft: '草稿', submitted: '已提交', reviewed: '已审核', returned: '退回' }
+    const m = { draft: 'info', submitted: 'success' }
+    const t = { draft: '未提交', submitted: '已保存提交' }
     return { type: m[props.survey?.status] || 'info', text: t[props.survey?.status] || '草稿' }
 })
 </script>
@@ -31,7 +31,7 @@ const statusTag = computed(() => {
                 <span class="sum-divider">|</span>
                 <span>风险：<el-tag :type="riskTag.type" size="small">{{ riskTag.text }}</el-tag></span>
                 <span class="sum-divider">|</span>
-                <span>调查状态：<el-tag :type="statusTag.type" size="small">{{ statusTag.text }}</el-tag></span>
+                <span>数据状态：<el-tag :type="statusTag.type" size="small">{{ statusTag.text }}</el-tag></span>
                 <span class="sum-divider">|</span>
                 <span>病害：{{ diseaseCount }} 项</span>
                 <span v-if="severeCount > 0" style="color:#F56C6C"> 严重：{{ severeCount }} 项</span>
@@ -39,7 +39,7 @@ const statusTag = computed(() => {
         </div>
         <div class="sum-actions">
             <el-button size="small" @click="emit('save')">保存草稿</el-button>
-            <el-button size="small" type="primary" @click="emit('submit')">提交调查</el-button>
+            <el-button size="small" type="primary" @click="emit('submit')">保存并完成调查</el-button>
         </div>
     </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { ArrowLeft, DocumentChecked, FolderOpened, Menu, MoreFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, CircleCheck, FolderOpened, Menu, MoreFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -10,16 +10,13 @@ const props = defineProps({
     dirty: Boolean
 })
 
-defineEmits(['save', 'submit', 'revision', 'export', 'back', 'open-nav'])
+defineEmits(['save', 'finalize', 'revision', 'export', 'back', 'open-nav'])
 
 const statusInfo = computed(() => {
     const map = {
         draft: ['草稿', 'info'],
         compiling: ['编制中', 'primary'],
-        submitted: ['已提交', 'warning'],
-        reviewed: ['已审核', 'success'],
-        approved: ['已批准', 'success'],
-        returned: ['退回修改', 'danger'],
+        completed: ['已定稿', 'success'],
         archived: ['已归档', 'info']
     }
     const value = map[props.archive.archiveStatus] || [props.archive.archiveStatus || '未知', 'info']
@@ -63,13 +60,13 @@ const stageText = computed(() => {
 
         <div class="summary-actions">
             <el-button :icon="FolderOpened" :loading="saving" @click="$emit('save')">保存草稿</el-button>
-            <el-button type="primary" :icon="DocumentChecked" @click="$emit('submit')">提交审核</el-button>
+            <el-button type="primary" :icon="CircleCheck" @click="$emit('finalize')">保存定稿</el-button>
             <el-dropdown @command="command => $emit(command)">
                 <el-button :icon="MoreFilled">更多</el-button>
                 <template #dropdown>
                     <el-dropdown-menu>
                         <el-dropdown-item command="revision">生成新版本</el-dropdown-item>
-                        <el-dropdown-item command="export">导出档案</el-dropdown-item>
+                        <el-dropdown-item command="export">导出 Word / PDF</el-dropdown-item>
                         <el-dropdown-item command="back" divided :icon="ArrowLeft">返回总览</el-dropdown-item>
                     </el-dropdown-menu>
                 </template>

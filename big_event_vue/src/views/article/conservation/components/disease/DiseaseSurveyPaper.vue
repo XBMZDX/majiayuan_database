@@ -1,22 +1,30 @@
 <!-- 右侧病害调查档案 -->
 <script setup>
-import { ref, watch, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { useTokenStore } from '@/stores/token.js'
-const token = computed(() => useTokenStore().token)
+import { ref, watch } from 'vue'
+import { Camera, Delete, EditPen, UploadFilled } from '@element-plus/icons-vue'
 
-const props = defineProps({ survey: Object, activeDisease: Object, diseaseTypes: Array })
-const emit = defineEmits(['update:survey', 'update:disease', 'upload-media'])
+const props = defineProps({
+    survey: Object,
+    activeDisease: Object,
+    diseaseTypes: Array,
+    uploading: Boolean
+})
+const emit = defineEmits([
+    'update:survey', 'update:disease', 'upload-media', 'annotate-media', 'delete-media'
+])
+const imageInput = ref()
 
 // Section 1: 整体保存状态
 const surveyForm = ref({})
 watch(() => props.survey, (v) => { surveyForm.value = { ...(v || {}) } }, { immediate: true })
 const onSurveyChange = () => emit('update:survey', { ...surveyForm.value })
+watch(surveyForm, onSurveyChange, { deep: true })
 
 // Section 2: 病害基本信息
 const diseaseForm = ref({})
 watch(() => props.activeDisease, (v) => { diseaseForm.value = { ...(v || {}) } }, { immediate: true })
 const onDiseaseChange = () => emit('update:disease', { ...diseaseForm.value })
+watch(diseaseForm, onDiseaseChange, { deep: true })
 
 const onTypeChange = (typeId) => {
     const t = props.diseaseTypes?.find(d => d.id === typeId)
@@ -26,16 +34,17 @@ const onTypeChange = (typeId) => {
     }
 }
 
-// Section 3: 位置（简化版）
-const locations = ref([])
-watch(() => props.activeDisease, () => { locations.value = [] }, { immediate: true })
-const addLocation = () => { locations.value.push({ partName: '', side: '整体', description: '' }) }
-const removeLocation = (i) => { locations.value.splice(i, 1) }
-
 // Section 5: 成因因素
 const causeFactors = ['自然环境','埋藏环境','人为活动','实验室环境变化','材质自身因素','温湿度波动','水盐迁移','氧化腐蚀','微生物作用','机械外力','其他']
 const selectedFactors = ref([])
 watch(() => props.activeDisease, () => { selectedFactors.value = [] })
+
+const chooseImages = () => imageInput.value?.click()
+const onImagesSelected = event => {
+    const files = Array.from(event.target.files || [])
+    if (files.length) emit('upload-media', files)
+    event.target.value = ''
+}
 </script>
 
 <template>
@@ -117,7 +126,34 @@ watch(() => props.activeDisease, () => { selectedFactors.value = [] })
                 </el-form-item>
             </div>
             <el-form-item label="位置描述"><el-input v-model="diseaseForm.positionDescription" type="textarea" :rows="2" size="small" /></el-form-item>
-            <el-button size="small" disabled style="margin-top:4px">病害图像标注功能待开发</el-button>
+            <div class="media-heading">
+                <div>
+                    <h4><Camera /> 病害图片</h4>
+                    <span>图片和标注内容直接保存到 MySQL</span>
+                </div>
+                <el-button type="primary" size="small" :icon="UploadFilled" :loading="uploading" @click="chooseImages">
+                    上传图片
+                </el-button>
+                <input ref="imageInput" class="file-input" type="file" accept="image/*" multiple @change="onImagesSelected">
+            </div>
+            <div v-if="activeDisease.media?.length" class="media-grid">
+                <article v-for="media in activeDisease.media" :key="media.id">
+                    <img :src="media.displayUrl" :alt="media.title || media.fileName">
+                    <div class="media-info">
+                        <b>{{ media.title || media.fileName }}</b>
+                        <span>{{ media.annotations?.length || 0 }} 个标注</span>
+                    </div>
+                    <div class="media-actions">
+                        <el-button size="small" type="primary" plain :icon="EditPen" @click="emit('annotate-media', media)">
+                            图片标注
+                        </el-button>
+                        <el-button size="small" type="danger" link :icon="Delete" @click="emit('delete-media', media)">
+                            删除
+                        </el-button>
+                    </div>
+                </article>
+            </div>
+            <el-empty v-else description="暂无病害图片" :image-size="55" />
         </div>
         <el-divider />
 
@@ -152,4 +188,17 @@ watch(() => props.activeDisease, () => { selectedFactors.value = [] })
 .section { margin-bottom: 12px; }
 .section h3 { margin: 0 0 12px; font-size: 15px; font-weight: 700; color: #1D2129; }
 .location-header { display: flex; gap: 16px; }
+.file-input { display: none; }
+.media-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 14px; border-top: 1px dashed #dcdfe6; }
+.media-heading > div { flex: 1; }
+.media-heading h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; font-size: 14px; }
+.media-heading h4 svg { width: 16px; }
+.media-heading span { color: #909399; font-size: 12px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+.media-grid article { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
+.media-grid img { display: block; width: 100%; height: 130px; object-fit: cover; background: #ebeef5; }
+.media-info { display: flex; justify-content: space-between; gap: 6px; padding: 8px 9px 4px; }
+.media-info b { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.media-info span { flex: none; color: #909399; font-size: 11px; }
+.media-actions { display: flex; justify-content: space-between; padding: 4px 7px 8px; }
 </style>

@@ -8,7 +8,7 @@ defineProps({
     nextStep: { type: Object, default: null }
 })
 
-defineEmits(['section', 'disease', 'previous', 'next', 'close', 'plan-change'])
+defineEmits(['section', 'disease', 'previous', 'next', 'close', 'plan-edit'])
 
 const severityMap = {
     minor: ['轻微', 'info'], moderate: ['中度', 'warning'],
@@ -37,7 +37,7 @@ const severityMap = {
                     <span>{{ item.label }}</span>
                     <small>{{ item.description }}</small>
                 </div>
-                <el-button v-if="differences.some(item => item.level === 'major')" link type="danger" @click="$emit('plan-change')">申请方案变更</el-button>
+                <el-button v-if="differences.some(item => item.level === 'major')" link type="primary" @click="$emit('plan-edit')">直接修改正式方案</el-button>
             </div>
             <p v-else class="empty-text">暂无计划与实际差异</p>
         </section>

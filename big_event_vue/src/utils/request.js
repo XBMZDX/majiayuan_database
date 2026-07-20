@@ -33,6 +33,7 @@ import router from '@/router'
 //添加响应拦截器
 instance.interceptors.response.use(
     result=>{
+        if (result.config?.responseType === 'blob') return result
         //判断业务状态码
         if(result.data.code === 0){
             return result.data;
@@ -45,7 +46,7 @@ instance.interceptors.response.use(
     },
     err=>{
         //判断相应状态码，如果为401则证明未登录，提示请登录，并跳转到登录页面
-        if(err.response.status===401)
+        if(err.response?.status===401)
         {
             ElMessage.error('请先登录')
             router.push('/Login')
@@ -53,7 +54,6 @@ instance.interceptors.response.use(
             ElMessage.error('服务异常')
         }
 
-        alert('服务异常');
         return Promise.reject(err);//异步的状态转化成失败的状态
     }
 )

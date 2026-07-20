@@ -1,7 +1,7 @@
 <!-- 左侧病害记录列表 -->
 <script setup>
 import { ref, computed } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Plus, Search } from '@element-plus/icons-vue'
 
 const props = defineProps({ records: Array, activeId: Number })
 const emit = defineEmits(['select', 'add', 'delete'])
@@ -43,7 +43,16 @@ const severityText = (s) => ({ critical: '危急', severe: '严重', moderate: '
                 <div class="dc-dev">{{ ({ stable: '稳定', slowly_developing: '缓慢发展', rapidly_developing: '快速发展' })[r.developmentStatus] || r.developmentStatus || '-' }}</div>
                 <div class="dc-footer">
                     <span>图片 {{ r.mediaCount || 0 }} 张</span>
-                    <el-tag v-if="r.emergency" type="danger" size="small" effect="dark">紧急</el-tag>
+                    <div class="dc-actions">
+                        <el-tag v-if="r.emergency" type="danger" size="small" effect="dark">紧急</el-tag>
+                        <el-button
+                            :icon="Delete"
+                            type="danger"
+                            text
+                            size="small"
+                            @click.stop="emit('delete', r)"
+                        />
+                    </div>
                 </div>
             </div>
         </div>
@@ -63,4 +72,5 @@ const severityText = (s) => ({ critical: '危急', severe: '严重', moderate: '
 .dc-part { font-size: 12px; color: #4E5969; margin-bottom: 4px; }
 .dc-dev { font-size: 11px; color: #E6A23C; margin-bottom: 6px; }
 .dc-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #C0C4CC; }
+.dc-actions { display: flex; align-items: center; gap: 4px; }
 </style>

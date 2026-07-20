@@ -10,8 +10,7 @@ defineProps({
 defineEmits(['select-section', 'show-revisions', 'close'])
 
 const statusText = {
-    draft: '草稿', compiling: '编制中', submitted: '已提交',
-    reviewed: '已审核', approved: '已批准', returned: '退回修改', archived: '已归档'
+    draft: '草稿', compiling: '编制中', completed: '已定稿', archived: '已归档'
 }
 </script>
 
@@ -25,7 +24,7 @@ const statusText = {
         <section>
             <div class="section-title"><span>档案完整度</span><b>{{ completeness }}%</b></div>
             <el-progress :percentage="completeness" :stroke-width="10" :color="completeness >= 80 ? '#67c23a' : '#1668c4'" />
-            <p class="hint">{{ completeness >= 80 ? '已达到提交完整度要求' : `距提交建议值还差 ${80 - completeness}%` }}</p>
+            <p class="hint">{{ completeness >= 80 ? '已达到建议定稿完整度' : `距定稿建议值还差 ${80 - completeness}%` }}</p>
         </section>
 
         <section>
@@ -53,9 +52,8 @@ const statusText = {
             <div class="section-title"><span>版本信息</span></div>
             <dl class="version-info">
                 <div><dt>当前版本</dt><dd>{{ archive.currentVersion }}</dd></div>
-                <div><dt>审核状态</dt><dd>{{ statusText[archive.archiveStatus] || archive.archiveStatus }}</dd></div>
+                <div><dt>数据状态</dt><dd>{{ statusText[archive.archiveStatus] || archive.archiveStatus }}</dd></div>
                 <div><dt>编制人</dt><dd>{{ archive.compiler || '-' }}</dd></div>
-                <div><dt>审核人</dt><dd>{{ archive.reviewer || '-' }}</dd></div>
                 <div><dt>最近修改</dt><dd>{{ archive.updateTime || '-' }}</dd></div>
             </dl>
             <el-button link type="primary" @click="$emit('show-revisions')">查看版本记录（{{ revisionCount }}）</el-button>

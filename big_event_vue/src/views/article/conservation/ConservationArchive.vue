@@ -7,13 +7,30 @@ import ArchiveSummaryBar from './components/archive/ArchiveSummaryBar.vue'
 import ArchiveSectionNav from './components/archive/ArchiveSectionNav.vue'
 import ArchivePaper from './components/archive/ArchivePaper.vue'
 import ArchiveAssistPanel from './components/archive/ArchiveAssistPanel.vue'
-import { USE_CONSERVATION_ARCHIVE_MOCK } from '@/api/conservationArchive'
 import {
-    archiveSectionDefinitions,
-    createMockArchive,
-    createMockArchiveWorkspace,
-    mockProjects
-} from './archiveMock'
+    createArchiveRevision as createArchiveRevisionApi,
+    createProjectArchive,
+    exportArchiveFile,
+    finalizeArchive as finalizeArchiveApi,
+    getProjectArchive,
+    updateArchive
+} from '@/api/conservationArchive'
+
+const archiveSectionDefinitions = [
+    ['project', '文物与项目信息', 'project', false, 5],
+    ['condition', '保存现状', 'disease_survey', false, 10],
+    ['disease', '病害调查', 'disease_survey', false, 15],
+    ['detection', '检测分析依据', 'detection', false, 10],
+    ['principle', '保护修复原则与目标', 'manual', true, 5],
+    ['plan', '保护修复方案', 'manual', true, 15],
+    ['material', '材料、工具与工艺', 'manual', true, 10],
+    ['process', '修复过程记录', 'process', false, 10],
+    ['comparison', '修复前后对比', 'comparison', false, 5],
+    ['restoration', '文物复原成果', 'restoration', false, 5],
+    ['evaluation', '效果评估', 'manual', true, 5],
+    ['advice', '保存环境与后续建议', 'manual', true, 3],
+    ['attachment', '影像及附件档案', 'attachment', true, 2]
+].map(([code, name, sourceType, editable, weight]) => ({ code, name, sourceType, editable, weight }))
 
 const route = useRoute()
 const router = useRouter()
@@ -36,9 +53,18 @@ const mobileNavVisible = ref(false)
 const assistOpen = ref(false)
 const revisionDialogVisible = ref(false)
 const revisionListVisible = ref(false)
+const exportDialogVisible = ref(false)
+const exporting = ref(false)
+const exportFormat = ref('docx')
 const revisions = ref([])
 const revisionForm = reactive({ versionNo: '', revisionDescription: '', operator: '' })
-const storageKey = computed(() => `conservation-archive-workbench:${projectId.value}`)
+
+const applyWorkbench = data => {
+    project.value = data?.project || null
+    archive.value = data?.archive || null
+    workspace.value = data?.workspace || null
+    revisions.value = data?.revisions || []
+}
 
 const hasText = (value) => String(value || '').trim().length > 0
 
@@ -49,7 +75,7 @@ const calculateSectionStatus = (code) => {
         case 'project':
             return project.value ? 'completed' : 'missing'
         case 'condition':
-            if (!['submitted', 'reviewed'].includes(w.survey?.status)) return 'missing'
+            if (w.survey?.status !== 'submitted') return 'missing'
             return w.surveyReferenceUpdated ? 'updated' : 'completed'
         case 'disease':
             return w.diseaseRecords.length ? (w.surveyReferenceUpdated ? 'updated' : 'completed') : 'missing'
@@ -117,7 +143,7 @@ const missingItems = computed(() => {
     const items = []
     const add = (key, label, section, critical = false) => items.push({ key, label, section, critical })
     if (!archive.value.compiler) add('compiler', '缺少档案编制人', 'principle', true)
-    if (!['submitted', 'reviewed'].includes(w.survey.status)) add('survey', '缺少正式病害调查', 'condition', true)
+    if (w.survey.status !== 'submitted') add('survey', '缺少已完成的病害调查', 'condition', true)
     if (!w.detectionReferences.length) add('detection', '至少关联一个检测或技术依据', 'detection', true)
     if (!w.principles.selected.length) add('principle', '缺少保护修复原则', 'principle', true)
     if (!w.goals.overall) add('goal', '缺少总体保护修复目标', 'principle', true)
@@ -161,36 +187,9 @@ const loadPage = async () => {
     loading.value = true
     loadError.value = ''
     try {
-        await new Promise(resolve => setTimeout(resolve, 350))
-        if (!projectId.value || !mockProjects[projectId.value]) {
-            project.value = null
-            archive.value = null
-            return
-        }
-        project.value = structuredClone(mockProjects[projectId.value])
-        if (!USE_CONSERVATION_ARCHIVE_MOCK) {
-            throw new Error('真实保护修复接口尚未启用，请保持 Mock 模式。')
-        }
-        const saved = localStorage.getItem(storageKey.value)
-        if (saved) {
-            const data = JSON.parse(saved)
-            archive.value = data.archive
-            workspace.value = data.workspace
-            revisions.value = data.revisions || []
-        } else if (projectId.value !== 5) {
-            archive.value = createMockArchive(project.value)
-            workspace.value = createMockArchiveWorkspace(project.value)
-            revisions.value = [{
-                id: 1, versionNo: 'V1.0', revisionType: 'initial',
-                revisionDescription: '建立保护修复档案并初始化默认章节',
-                operator: project.value.principal, createTime: '2026-07-15 10:00:00'
-            }]
-        } else {
-            // 项目5用于完整演示“尚未建立档案”的空状态和建立档案流程。
-            archive.value = null
-            workspace.value = null
-            revisions.value = []
-        }
+        if (!projectId.value) throw new Error('缺少保护修复项目ID')
+        const result = await getProjectArchive(projectId.value)
+        applyWorkbench(result.data)
         dirty.value = false
     } catch (error) {
         console.error(error)
@@ -205,52 +204,38 @@ const createArchive = async () => {
     if (!project.value) return
     loading.value = true
     try {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        archive.value = createMockArchive(project.value)
-        workspace.value = createMockArchiveWorkspace(project.value)
-        revisions.value = [{
-            id: Date.now(), versionNo: 'V1.0', revisionType: 'initial',
-            revisionDescription: '建立保护修复档案并初始化默认章节',
-            operator: project.value.principal,
-            createTime: new Date().toLocaleString('zh-CN', { hour12: false })
-        }]
+        const result = await createProjectArchive(projectId.value)
+        applyWorkbench(result.data)
         activeSection.value = 'project'
-        dirty.value = true
+        dirty.value = false
         ElMessage.success('保护修复档案已建立，已自动关联项目、文物和最新病害调查')
+    } catch (error) {
+        ElMessage.error(error.message || '建立档案失败')
     } finally {
         loading.value = false
     }
 }
 
-const persistArchive = () => {
-    localStorage.setItem(storageKey.value, JSON.stringify({
-        archive: archive.value,
-        workspace: workspace.value,
-        revisions: revisions.value
-    }))
-}
-
 const saveDraft = async (showMessage = true) => {
-    if (!archive.value || !workspace.value) return
+    if (!archive.value || !workspace.value) return false
     saving.value = true
     try {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        if (archive.value.archiveStatus === 'draft') archive.value.archiveStatus = 'compiling'
         archive.value.protectionGoal = workspace.value.goals.overall
         archive.value.conservationBasis = workspace.value.plan.technicalBasis
-        archive.value.completenessRate = completeness.value
-        archive.value.updateTime = new Date().toLocaleString('zh-CN', { hour12: false })
-        persistArchive()
+        const result = await updateArchive(archive.value.id, archive.value, workspace.value, completeness.value)
+        applyWorkbench(result.data)
         dirty.value = false
         if (showMessage) ElMessage.success(`草稿已保存：${archive.value.updateTime}`)
-    } catch {
-        ElMessage.error('保存失败，请稍后重试')
+        return true
+    } catch (error) {
+        ElMessage.error(error.message || '保存失败，请稍后重试')
+        return false
     } finally {
         saving.value = false
     }
 }
 
-const submitForReview = async () => {
+const finalizeCurrentArchive = async () => {
     const critical = missingItems.value.filter(item => item.critical)
     if (completeness.value < 80 || critical.length) {
         const list = [
@@ -259,28 +244,23 @@ const submitForReview = async () => {
         ]
         await ElMessageBox.alert(
             `<div style="line-height:1.9">${list.map(item => `• ${item}`).join('<br>')}</div>`,
-            '暂不能提交审核',
+            '暂不能定稿',
             { dangerouslyUseHTMLString: true, confirmButtonText: '查看并完善', type: 'warning' }
         )
         if (critical[0]) selectSection(critical[0].section)
         return
     }
     await ElMessageBox.confirm(
-        `当前完整度为${completeness.value}%，提交后将生成版本快照。是否继续？`,
-        '提交审核',
+        `当前完整度为${completeness.value}%，定稿后将保存当前版本快照。是否继续？`,
+        '档案定稿',
         { type: 'warning' }
     )
-    await saveDraft(false)
-    archive.value.archiveStatus = 'submitted'
-    archive.value.submittedTime = new Date().toLocaleString('zh-CN', { hour12: false })
-    revisions.value.unshift({
-        id: Date.now(), versionNo: archive.value.currentVersion, revisionType: 'submit',
-        revisionDescription: '提交档案审核并生成内容快照',
-        operator: archive.value.compiler, createTime: archive.value.submittedTime
-    })
-    persistArchive()
+    archive.value.protectionGoal = workspace.value.goals.overall
+    archive.value.conservationBasis = workspace.value.plan.technicalBasis
+    const result = await finalizeArchiveApi(archive.value.id, archive.value, workspace.value, completeness.value)
+    applyWorkbench(result.data)
     dirty.value = false
-    ElMessage.success('档案已提交审核')
+    ElMessage.success('档案已定稿并生成版本快照')
 }
 
 const nextVersion = () => {
@@ -300,21 +280,52 @@ const createRevision = async () => {
         ElMessage.warning('请完整填写版本号、修改说明和操作人')
         return
     }
-    await saveDraft(false)
-    const time = new Date().toLocaleString('zh-CN', { hour12: false })
-    archive.value.currentVersion = revisionForm.versionNo
-    archive.value.updateTime = time
-    revisions.value.unshift({
-        id: Date.now(), versionNo: revisionForm.versionNo, revisionType: 'manual',
-        revisionDescription: revisionForm.revisionDescription,
-        operator: revisionForm.operator, createTime: time
+    const result = await createArchiveRevisionApi(archive.value.id, {
+        archive: archive.value,
+        workspace: workspace.value,
+        completeness: completeness.value,
+        ...revisionForm
     })
-    persistArchive()
+    applyWorkbench(result.data)
     revisionDialogVisible.value = false
     ElMessage.success(`新版本 ${revisionForm.versionNo} 已生成`)
 }
 
-const handleExportArchive = () => ElMessage.info('档案导出功能将在后续接入 Word/PDF 生成接口。')
+const handleExportArchive = format => {
+    exportFormat.value = ['docx', 'pdf'].includes(format) ? format : 'docx'
+    exportDialogVisible.value = true
+}
+
+const parseDownloadName = (headers, fallback) => {
+    const disposition = headers?.['content-disposition'] || ''
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+    try { return match ? decodeURIComponent(match[1]) : fallback }
+    catch { return fallback }
+}
+
+const downloadArchive = async () => {
+    exporting.value = true
+    try {
+        if (dirty.value && !(await saveDraft(false))) return
+        const response = await exportArchiveFile(archive.value.id, exportFormat.value)
+        const extension = exportFormat.value === 'pdf' ? 'pdf' : 'docx'
+        const fallback = `${archive.value.archiveCode}-${archive.value.archiveTitle}.${extension}`
+        const url = URL.createObjectURL(response.data)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = parseDownloadName(response.headers, fallback)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+        exportDialogVisible.value = false
+        ElMessage.success(`${extension.toUpperCase()} 档案已生成并下载`)
+    } catch (error) {
+        ElMessage.error(error.message || '档案导出失败')
+    } finally {
+        exporting.value = false
+    }
+}
 
 const confirmLeave = async () => {
     if (!dirty.value) return true
@@ -342,7 +353,7 @@ const selectSection = (code) => {
     nextTick(() => document.querySelector('.paper-scroll')?.scrollTo({ top: 0, behavior: 'smooth' }))
 }
 
-const navigateBusiness = async (target) => {
+const navigateBusiness = async (target, businessId) => {
     const routes = {
         overview: '/conservation/overview',
         artifact: '/artifacts/manage',
@@ -351,19 +362,25 @@ const navigateBusiness = async (target) => {
         comparison: `/conservation/project/${projectId.value}/comparison`,
         restoration: `/conservation/project/${projectId.value}/restoration`,
         monitoring: `/conservation/project/${projectId.value}/monitoring`,
-        'detection-detail': '/detection/result'
+        'detection-overview': '/detection/overview',
+        'detection-detail': businessId ? `/detection/experiment/${businessId}` : '/detection/result'
     }
     if (routes[target] && await confirmLeave()) {
+        if (target === 'detection-detail') {
+            const analysisResultIds = workspace.value.detectionReferences
+                .map(item => Number(item.analysisResultId || item.sourceBusinessId || item.id))
+                .filter(Number.isFinite)
+            sessionStorage.setItem('expIds', JSON.stringify(analysisResultIds))
+        }
         dirty.value = false
         router.push(routes[target])
     }
 }
 
-const refreshSurveyReference = () => {
-    workspace.value.surveyReferenceUpdated = false
-    archive.value.sourceSurveyVersion = 'V1.1'
-    archive.value.sourceSurveyId = 2
-    dirty.value = true
+const refreshSurveyReference = async () => {
+    const result = await getProjectArchive(projectId.value)
+    applyWorkbench(result.data)
+    dirty.value = false
     ElMessage.success('已刷新最新正式病害调查引用，人工编制内容未被覆盖')
 }
 
@@ -420,7 +437,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                 :saving="saving"
                 :dirty="dirty"
                 @save="saveDraft"
-                @submit="submitForReview"
+                @finalize="finalizeCurrentArchive"
                 @revision="openRevisionDialog"
                 @export="handleExportArchive"
                 @back="backToOverview"
@@ -479,6 +496,31 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                     <el-table-column prop="operator" label="操作人" width="90" />
                     <el-table-column prop="createTime" label="生成时间" width="170" />
                 </el-table>
+            </el-dialog>
+
+            <el-dialog v-model="exportDialogVisible" title="导出保护修复档案" width="520px">
+                <el-alert
+                    title="导出前会自动保存当前修改"
+                    description="文件内容来自数据库中的档案、病害、方案、过程、前后对比、复原成果、后续建议和附件清单。"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                />
+                <el-form label-position="top" style="margin-top:18px">
+                    <el-form-item label="文件格式">
+                        <el-radio-group v-model="exportFormat">
+                            <el-radio-button value="docx">Word（.docx）</el-radio-button>
+                            <el-radio-button value="pdf">PDF（.pdf）</el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+                    <el-form-item label="导出版本">
+                        <el-input :model-value="archive.currentVersion" disabled />
+                    </el-form-item>
+                </el-form>
+                <template #footer>
+                    <el-button @click="exportDialogVisible=false">取消</el-button>
+                    <el-button type="primary" :loading="exporting" @click="downloadArchive">生成并下载</el-button>
+                </template>
             </el-dialog>
         </template>
     </div>

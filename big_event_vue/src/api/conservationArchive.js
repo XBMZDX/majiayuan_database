@@ -1,8 +1,5 @@
 import request from '@/utils/request'
 
-// 后端保护修复模块完成后改为 false，即可切换到真实接口。
-export const USE_CONSERVATION_ARCHIVE_MOCK = true
-
 export const getConservationProject = (projectId) =>
     request.get(`/conservation/projects/${projectId}`)
 
@@ -12,11 +9,17 @@ export const getProjectArchive = (projectId) =>
 export const createProjectArchive = (projectId, data) =>
     request.post(`/conservation/projects/${projectId}/archive`, data)
 
-export const updateArchive = (archiveId, data) =>
-    request.put(`/conservation/archives/${archiveId}`, data)
+export const updateArchive = (archiveId, archive, workspace, completeness) =>
+    request.put(`/conservation/archives/${archiveId}`, { archive, workspace, completeness })
 
-export const submitArchive = (archiveId) =>
-    request.post(`/conservation/archives/${archiveId}/submit`)
+export const finalizeArchive = (archiveId, archive, workspace, completeness) =>
+    request.post(`/conservation/archives/${archiveId}/finalize`, { archive, workspace, completeness })
+
+export const exportArchiveFile = (archiveId, format) =>
+    request.get(`/conservation/archives/${archiveId}/export`, {
+        params: { format },
+        responseType: 'blob'
+    })
 
 export const createArchiveRevision = (archiveId, data) =>
     request.post(`/conservation/archives/${archiveId}/revision`, data)
@@ -33,8 +36,8 @@ export const getLatestDiseaseSurvey = (projectId) =>
 export const getDiseaseRecords = (surveyId) =>
     request.get(`/conservation/disease-surveys/${surveyId}/records`)
 
-export const getDetectionReferences = (projectId) =>
-    request.get(`/conservation/projects/${projectId}/detection-references`)
+export const getDetectionCandidates = projectId =>
+    request.get(`/conservation/projects/${projectId}/detection-candidates`)
 
 export const getArchivePlan = (archiveId) =>
     request.get(`/conservation/archives/${archiveId}/plan`)
@@ -80,6 +83,9 @@ export const addArchiveAttachment = (archiveId, data) =>
 
 export const deleteArchiveAttachment = (id) =>
     request.delete(`/conservation/archive-attachments/${id}`)
+
+export const getArchiveAttachmentContent = id =>
+    request.get(`/conservation/archive-attachments/${id}/content`, { responseType: 'blob' })
 
 export const getArchiveRevisions = (archiveId) =>
     request.get(`/conservation/archives/${archiveId}/revisions`)

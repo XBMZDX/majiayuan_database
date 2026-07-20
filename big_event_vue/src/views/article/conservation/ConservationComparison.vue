@@ -7,14 +7,16 @@ import ComparisonSummaryBar from './components/comparison/ComparisonSummaryBar.v
 import ComparisonGroupList from './components/comparison/ComparisonGroupList.vue'
 import ComparisonWorkspace from './components/comparison/ComparisonWorkspace.vue'
 import ComparisonAssistPanel from './components/comparison/ComparisonAssistPanel.vue'
-import { createMockArchive, createMockArchiveWorkspace, mockProjects } from './archiveMock'
-import { USE_CONSERVATION_COMPARISON_MOCK } from '@/api/conservationComparison'
-import { createComparisonContext, createEmptyComparison, createMockComparisonGroups } from './comparisonMock'
+import {
+    getComparisonWorkbench,
+    getComparisonMediaContent,
+    saveComparisonWorkbench
+} from '@/api/conservationComparison'
+import { getProcessMediaContent } from '@/api/conservationProcess'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => Number(route.params.projectId || route.query.projectId) || null)
-const storageKey = computed(() => `conservation-comparison-workbench:${projectId.value}`)
 
 const loading = ref(true)
 const saving = ref(false)
@@ -53,6 +55,30 @@ const selectedMedia = computed(() => sourceMedia.value.filter(item => selectedMe
 const createHasBefore = computed(() => selectedMedia.value.some(item => item.imageStage === 'before'))
 const createHasAfter = computed(() => selectedMedia.value.some(item => item.imageStage === 'after'))
 const sourceStageMap = { before: '修复前', during: '修复中', after: '修复后', follow_up: '复查', reference: '参考' }
+const objectUrls = []
+
+const baseEvaluation = () => ({
+    diseaseControlScore: 0, structuralStabilityScore: 0, appearanceScore: 0,
+    materialCompatibilityScore: 0, informationPreservationScore: 0, distinguishabilityScore: 0,
+    overallScore: 0, diseaseControlComment: '', structuralComment: '', appearanceComment: '',
+    compatibilityComment: '', informationPreservationComment: '', sideEffectComment: '',
+    remainingIssue: '', finalConclusion: '', evaluator: '', evaluationDate: ''
+})
+const createEmptyComparison = (project, context, seed = Date.now()) => ({
+    id: seed, projectId: project.id, artifactId: project.artifactId,
+    processId: context.process.id, stepId: null,
+    comparisonCode: `CMP-${String(project.artifactCode || project.id).replace(/[^A-Za-z0-9]/g, '')}-${String(seed).slice(-3)}`,
+    comparisonTitle: '', comparisonType: 'before_after', targetPart: '', shootingPosition: '',
+    beforeSummary: '', afterSummary: '', comparisonDescription: '', overallEffect: '',
+    evaluationStatus: 'draft', overallComparison: false, selectedForArchive: false,
+    selectedForRestoration: false, selectedAsMonitoringBaseline: false, evaluator: '',
+    evaluationDate: '', updateTime: '', noApplicableMetrics: false,
+    images: [], diseases: [], metrics: [], evaluation: baseEvaluation(),
+    monitoring: {
+        unresolvedDiseases: '', stabilityConcern: '', reviewPart: '', indicators: '',
+        cycle: '', warningConditions: '', requiresRework: false, notes: '', monitoringDecision: ''
+    }
+})
 
 const missingItems = computed(() => {
     const group = current.value
@@ -100,36 +126,6 @@ const completeness = computed(() => {
     return score
 })
 
-const parseSavedProcess = context => {
-    try {
-        const saved = JSON.parse(localStorage.getItem(`conservation-process-workbench:${projectId.value}`) || 'null')
-        if (!saved?.processRecord || !saved?.steps?.length) return context
-        context.process = saved.processRecord
-        context.steps = saved.steps
-        const existingIds = new Set(context.sourceMedia.map(item => `${item.stepId}-${item.fileName}`))
-        saved.steps.forEach(step => {
-            step.media?.forEach((media, index) => {
-                if (!media.selectedForComparison || existingIds.has(`${step.id}-${media.fileName}`)) return
-                context.sourceMedia.push({
-                    id: Number(`${step.id}${index + 1}${Date.now().toString().slice(-3)}`),
-                    sourceMediaId: media.id, processId: saved.processRecord.id, stepId: step.id,
-                    stepName: step.stepName, stepStatus: step.stepStatus, imageStage: media.mediaStage,
-                    imageRole: media.imageRole || 'detail', fileName: media.fileName,
-                    fileUrl: media.fileUrl || `/mock/comparison/crack-${media.mediaStage === 'after' ? 'after' : media.mediaStage === 'during' ? 'during' : 'before'}.svg`,
-                    thumbnailUrl: media.thumbnailUrl || media.fileUrl || '/mock/comparison/crack-before.svg',
-                    targetPart: media.targetPart || step.targetPart, shootingPosition: media.shootingPosition || '正面',
-                    shootingTime: media.shootingTime, photographer: media.photographer,
-                    imageDescription: media.description, selectedForComparison: true,
-                    sourceModule: '修复过程记录', projectId: projectId.value, artifactId: project.value.artifactId
-                })
-            })
-        })
-        return context
-    } catch {
-        return context
-    }
-}
-
 const normalizeLoadedGroups = data => data.map(group => ({
     ...group,
     noApplicableMetrics: Boolean(group.noApplicableMetrics),
@@ -143,28 +139,52 @@ const normalizeLoadedGroups = data => data.map(group => ({
     }
 }))
 
+const blobUrl = async (loader, id) => {
+    const response = await loader(id)
+    const url = URL.createObjectURL(response.data)
+    objectUrls.push(url)
+    return url
+}
+const hydrateMedia = async () => {
+    await Promise.all(sourceMedia.value.map(async media => {
+        try {
+            const url = await blobUrl(getProcessMediaContent, media.sourceMediaId || media.id)
+            media.fileUrl = media.thumbnailUrl = url
+        } catch {
+            media.fileUrl = media.thumbnailUrl = ''
+        }
+    }))
+    await Promise.all(groups.value.flatMap(group => group.images.map(async image => {
+        try {
+            const url = image.sourceMediaId
+                ? await blobUrl(getProcessMediaContent, image.sourceMediaId)
+                : await blobUrl(getComparisonMediaContent, image.id)
+            image.fileUrl = image.thumbnailUrl = url
+        } catch {
+            try {
+                const url = await blobUrl(getComparisonMediaContent, image.id)
+                image.fileUrl = image.thumbnailUrl = url
+            } catch {
+                image.fileUrl = image.thumbnailUrl = ''
+            }
+        }
+    })))
+}
+
 const loadPage = async () => {
     loading.value = true
     loadError.value = ''
     try {
-        await new Promise(resolve => setTimeout(resolve, 350))
-        project.value = projectId.value ? structuredClone(mockProjects[projectId.value] || null) : null
-        if (!project.value) return
-        if (!USE_CONSERVATION_COMPARISON_MOCK) throw new Error('真实修复前后对比接口尚未启用，请保持 Mock 模式。')
-        if (projectId.value === 5) {
-            processRecord.value = null
-            steps.value = []
-            sourceMedia.value = []
-            groups.value = []
-            return
-        }
-        const context = parseSavedProcess(createComparisonContext(project.value))
-        processRecord.value = context.process
-        steps.value = context.steps
-        diseases.value = context.diseases
-        sourceMedia.value = context.sourceMedia
-        const saved = JSON.parse(localStorage.getItem(storageKey.value) || 'null')
-        groups.value = normalizeLoadedGroups(saved?.groups || (projectId.value === 1 ? createMockComparisonGroups(project.value) : []))
+        if (!projectId.value) throw new Error('缺少保护修复项目ID')
+        const result = await getComparisonWorkbench(projectId.value)
+        const data = result.data || {}
+        project.value = data.project || null
+        processRecord.value = data.processRecord || null
+        steps.value = data.steps || []
+        diseases.value = data.diseases || []
+        sourceMedia.value = data.sourceMedia || []
+        groups.value = normalizeLoadedGroups(data.groups || [])
+        await hydrateMedia()
         activeId.value = Number(route.query.comparisonId)
             || groups.value.find(item => item.evaluationStatus === 'draft')?.id
             || groups.value[0]?.id
@@ -178,77 +198,22 @@ const loadPage = async () => {
     }
 }
 
-const persist = () => localStorage.setItem(storageKey.value, JSON.stringify({ groups: groups.value }))
-const syncLinkedData = () => {
-    const summary = {
-        total: groups.value.length,
-        completed: groups.value.filter(item => ['completed', 'reviewed', 'archived'].includes(item.evaluationStatus)).length,
-        selectedForArchive: groups.value.filter(item => item.selectedForArchive).length,
-        monitoringBaselines: groups.value.filter(item => item.selectedAsMonitoringBaseline).length,
-        overallEffect: groups.value.find(item => item.overallEffect)?.overallEffect || '',
-        updateTime: new Date().toLocaleString('zh-CN', { hour12: false })
-    }
-    localStorage.setItem(`conservation-comparison-summary:${projectId.value}`, JSON.stringify(summary))
-    localStorage.setItem(`conservation-restoration-comparison-source:${projectId.value}`, JSON.stringify(
-        groups.value.filter(item => item.selectedForRestoration).map(item => ({
-            comparisonId: item.id, title: item.comparisonTitle, conclusion: item.evaluation.finalConclusion,
-            afterImages: item.images.filter(image => image.imageStage === 'after')
-        }))
-    ))
-    localStorage.setItem(`conservation-monitoring-baseline:${projectId.value}`, JSON.stringify(
-        groups.value.filter(item => item.selectedAsMonitoringBaseline).map(item => ({
-            comparisonId: item.id, title: item.comparisonTitle, part: item.targetPart,
-            shootingPosition: item.shootingPosition, diseases: item.diseases, metrics: item.metrics,
-            monitoring: item.monitoring, afterImages: item.images.filter(image => image.imageStage === 'after')
-        }))
-    ))
-    localStorage.setItem(`conservation-disease-effect-summary:${projectId.value}`, JSON.stringify(
-        groups.value.flatMap(item => item.diseases.map(disease => ({
-            comparisonId: item.id, diseaseRecordId: disease.diseaseRecordId,
-            treatmentEffect: disease.treatmentEffect, afterStatus: disease.afterStatus,
-            effectDescription: disease.effectDescription
-        })))
-    ))
-
-    const archiveKey = `conservation-archive-workbench:${projectId.value}`
-    try {
-        const archiveData = JSON.parse(localStorage.getItem(archiveKey) || 'null') || {
-            archive: createMockArchive(project.value),
-            workspace: createMockArchiveWorkspace(project.value),
-            revisions: []
-        }
-        archiveData.workspace.comparisons = groups.value
-            .filter(item => item.selectedForArchive)
-            .map(item => ({
-                id: item.id, title: item.comparisonTitle, part: item.targetPart,
-                disease: item.diseases.map(disease => disease.diseaseName).join('、'),
-                step: steps.value.find(step => step.id === item.stepId)?.stepName || '',
-                description: item.evaluation.finalConclusion || item.comparisonDescription,
-                evaluationStatus: item.evaluationStatus,
-                beforeImage: item.images.find(image => image.imageStage === 'before')?.thumbnailUrl,
-                afterImage: item.images.find(image => image.imageStage === 'after')?.thumbnailUrl
-            }))
-        localStorage.setItem(archiveKey, JSON.stringify(archiveData))
-    } catch {
-        // 档案尚未形成浏览器草稿时，仅保留独立对比摘要。
-    }
-}
-
 const saveCurrent = async (showMessage = true) => {
     if (!current.value) return
     saving.value = true
     try {
-        await new Promise(resolve => setTimeout(resolve, 250))
         current.value.evaluation.overallScore = Number(current.value.evaluation.overallScore || 0)
         current.value.evaluator = current.value.evaluation.evaluator
         current.value.evaluationDate = current.value.evaluation.evaluationDate
-        current.value.updateTime = new Date().toLocaleString('zh-CN', { hour12: false })
-        persist()
-        syncLinkedData()
+        const currentId = activeId.value
+        const result = await saveComparisonWorkbench(projectId.value, groups.value)
+        groups.value = normalizeLoadedGroups(result.data?.groups || [])
+        activeId.value = groups.value.find(item => item.id === currentId)?.id || groups.value[0]?.id
+        await hydrateMedia()
         dirty.value = false
         if (showMessage) ElMessage.success(`当前对比已保存：${current.value.updateTime}`)
-    } catch {
-        ElMessage.error('保存失败，请稍后重试')
+    } catch (error) {
+        ElMessage.error(error.message || '保存失败，请稍后重试')
     } finally {
         saving.value = false
     }
@@ -349,12 +314,16 @@ const deleteGroup = async group => {
         })
         groups.value.splice(groups.value.indexOf(group), 1)
         if (activeId.value === group.id) activeId.value = groups.value[0]?.id || null
-        persist()
-        syncLinkedData()
+        const result = await saveComparisonWorkbench(projectId.value, groups.value)
+        groups.value = normalizeLoadedGroups(result.data?.groups || [])
+        await hydrateMedia()
         dirty.value = false
         ElMessage.success('对比组已删除，修复过程原始影像保持不变')
-    } catch {
-        // 用户取消删除。
+    } catch (error) {
+        if (error !== 'cancel' && error !== 'close') {
+            ElMessage.error(error.message || '删除失败，请稍后重试')
+            await loadPage()
+        }
     }
 }
 const completeEvaluation = async () => {
@@ -398,8 +367,8 @@ const batchArchive = async () => {
     const candidates = groups.value.filter(item => ['completed', 'reviewed'].includes(item.evaluationStatus) && !item.selectedForArchive)
     if (!candidates.length) return ElMessage.info('没有可批量收入档案的已完成对比组')
     candidates.forEach(item => { item.selectedForArchive = true })
-    persist()
-    syncLinkedData()
+    dirty.value = true
+    await saveCurrent(false)
     ElMessage.success(`已将 ${candidates.length} 个评价完成的对比组收入档案引用`)
 }
 const reorderImages = reordered => {
@@ -451,7 +420,10 @@ onMounted(() => {
     window.addEventListener('beforeunload', handleBeforeUnload)
     loadPage()
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnload))
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload)
+    objectUrls.forEach(url => URL.revokeObjectURL(url))
+})
 </script>
 
 <template>

@@ -1,7 +1,13 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Link, Plus, Upload } from '@element-plus/icons-vue'
+import { Delete, Edit, Link, Plus, Search, Upload } from '@element-plus/icons-vue'
+import {
+    addArchiveAttachment,
+    deleteArchiveAttachment,
+    getArchiveAttachmentContent,
+    getDetectionCandidates
+} from '@/api/conservationArchive'
 
 const props = defineProps({
     activeSection: { type: String, required: true },
@@ -168,45 +174,154 @@ const addTool = () => {
 }
 
 const attachmentDialogVisible = ref(false)
+const attachmentFile = ref(null)
+const attachmentUploading = ref(false)
 const attachmentForm = reactive({
-    fileName: '', fileType: '报告', sourceModule: '档案自身附件', sectionName: '',
-    fileSize: '', version: 'V1.0', description: ''
+    fileType: '报告', sourceModule: '档案自身附件', sectionName: '',
+    version: 'V1.0', description: ''
 })
-const addAttachment = () => {
-    if (!attachmentForm.fileName) return ElMessage.warning('请填写文件名称')
-    props.workspace.attachments.push({
-        ...attachmentForm,
-        id: Date.now(),
-        uploadedBy: props.archive.compiler || '当前用户',
-        uploadTime: new Date().toLocaleString('zh-CN', { hour12: false })
-    })
-    Object.assign(attachmentForm, { fileName: '', fileType: '报告', sourceModule: '档案自身附件', sectionName: '', fileSize: '', version: props.archive.currentVersion, description: '' })
-    attachmentDialogVisible.value = false
-    markDirty()
+const selectAttachmentFile = uploadFile => {
+    attachmentFile.value = uploadFile.raw
+}
+const addAttachment = async () => {
+    if (!attachmentFile.value) return ElMessage.warning('请选择需要上传的文件')
+    attachmentUploading.value = true
+    try {
+        const form = new FormData()
+        form.append('file', attachmentFile.value)
+        Object.entries({
+            ...attachmentForm,
+            uploadedBy: props.archive.compiler || '当前用户'
+        }).forEach(([key, value]) => form.append(key, value || ''))
+        const result = await addArchiveAttachment(props.archive.id, form)
+        props.workspace.attachments.unshift(result.data)
+        attachmentFile.value = null
+        Object.assign(attachmentForm, {
+            fileType: '报告', sourceModule: '档案自身附件', sectionName: '',
+            version: props.archive.currentVersion, description: ''
+        })
+        attachmentDialogVisible.value = false
+        ElMessage.success('附件已上传到MySQL')
+    } finally {
+        attachmentUploading.value = false
+    }
 }
 const attachmentFilters = reactive({ keyword: '', source: '', type: '' })
+const formatFileSize = value => {
+    const bytes = Number(value || 0)
+    if (!bytes) return '-'
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
 const filteredAttachments = computed(() => props.workspace.attachments.filter(item => {
     const keyword = attachmentFilters.keyword.trim().toLowerCase()
     const matchKeyword = !keyword || [item.fileName, item.description].some(value => (value || '').toLowerCase().includes(keyword))
     return matchKeyword && (!attachmentFilters.source || item.sourceModule === attachmentFilters.source) && (!attachmentFilters.type || item.fileType === attachmentFilters.type)
 }))
-const deleteAttachment = (row) => {
+const deleteAttachment = async row => {
+    await ElMessageBox.confirm(`确认删除附件“${row.fileName}”吗？`, '删除附件', { type: 'warning' })
+    await deleteArchiveAttachment(row.id)
     props.workspace.attachments = props.workspace.attachments.filter(item => item.id !== row.id)
-    markDirty()
+    ElMessage.success('附件已删除')
+}
+const openAttachment = async (row, download = false) => {
+    const response = await getArchiveAttachmentContent(row.id)
+    const url = URL.createObjectURL(response.data)
+    if (download) {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = row.fileName
+        link.click()
+    } else {
+        window.open(url, '_blank')
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
-const addDetectionReference = () => {
-    props.workspace.detectionReferences.push({
-        id: Date.now(), experimentName: '新关联检测结果', experimentType: '待选择', method: '-',
-        instrumentModel: '-', detectionDate: '-', detector: '-', conclusion: '请在检测分析模块选择正式结果',
-        relatedDisease: '-', purpose: '方案选择依据', reportName: '-'
+const detectionDialogVisible = ref(false)
+const detectionLoading = ref(false)
+const detectionCandidates = ref([])
+const selectedDetectionCandidates = ref([])
+const detectionFilters = reactive({ keyword: '', status: '' })
+const detectionLinkForm = reactive({ relatedDiseaseIds: [], purpose: '保护修复技术依据' })
+const linkedDetectionIds = computed(() => new Set(
+    props.workspace.detectionReferences.map(item =>
+        Number(item.analysisResultId || item.sourceBusinessId || item.id)
+    )
+))
+const filteredDetectionCandidates = computed(() => {
+    const keyword = detectionFilters.keyword.trim().toLowerCase()
+    return detectionCandidates.value.filter(item => {
+        const matchesKeyword = !keyword || [
+            item.experimentName, item.method, item.instrumentModel, item.purpose,
+            item.conclusion, item.resultStatus, item.samplePosition
+        ].some(value => String(value || '').toLowerCase().includes(keyword))
+        const matchesStatus = !detectionFilters.status
+            || (detectionFilters.status === 'has_result'
+                ? item.hasResult
+                : item.resultStatus === detectionFilters.status)
+        return matchesKeyword && matchesStatus
     })
-    markDirty()
-    ElMessage.success('已添加检测结果关联占位')
+})
+const openDetectionDialog = async () => {
+    const legacy = props.workspace.detectionReferences.filter(item =>
+        item.experimentType === '待选择' || item.conclusion === '请在检测分析模块选择正式结果'
+    )
+    if (legacy.length) {
+        props.workspace.detectionReferences = props.workspace.detectionReferences.filter(item => !legacy.includes(item))
+        markDirty()
+    }
+    detectionDialogVisible.value = true
+    detectionLoading.value = true
+    selectedDetectionCandidates.value = []
+    Object.assign(detectionFilters, { keyword: '', status: '' })
+    Object.assign(detectionLinkForm, { relatedDiseaseIds: [], purpose: '保护修复技术依据' })
+    try {
+        const result = await getDetectionCandidates(props.project.id)
+        detectionCandidates.value = result.data || []
+    } catch (error) {
+        ElMessage.error(error.message || '检测结果加载失败')
+    } finally {
+        detectionLoading.value = false
+    }
 }
-const removeDetectionReference = (row) => {
-    props.workspace.detectionReferences = props.workspace.detectionReferences.filter(item => item.id !== row.id)
+const detectionSelectable = row => !linkedDetectionIds.value.has(Number(row.analysisResultId))
+const onDetectionSelection = rows => {
+    selectedDetectionCandidates.value = rows.filter(detectionSelectable)
+}
+const confirmDetectionReferences = () => {
+    if (!selectedDetectionCandidates.value.length) return ElMessage.warning('请至少选择一项检测结果')
+    const relatedDisease = props.workspace.diseaseRecords
+        .filter(item => detectionLinkForm.relatedDiseaseIds.includes(item.id))
+        .map(item => item.diseaseName)
+        .join('、')
+    const existing = linkedDetectionIds.value
+    const additions = selectedDetectionCandidates.value
+        .filter(item => !existing.has(Number(item.analysisResultId)))
+        .map(item => ({
+            ...item,
+            id: item.analysisResultId,
+            referenceId: item.analysisResultId,
+            sourceBusinessType: 'analysis_result',
+            sourceBusinessId: item.analysisResultId,
+            relatedDisease,
+            purpose: detectionLinkForm.purpose || item.purpose || '保护修复技术依据'
+        }))
+    props.workspace.detectionReferences.push(...additions)
+    detectionDialogVisible.value = false
     markDirty()
+    ElMessage.success(`已关联 ${additions.length} 项真实检测结果`)
+}
+const removeDetectionReference = row => {
+    ElMessageBox.confirm(`确认解除“${row.experimentName}”的档案关联？`, '解除检测结果', { type: 'warning' })
+        .then(() => {
+            const targetId = Number(row.analysisResultId || row.sourceBusinessId || row.id)
+            props.workspace.detectionReferences = props.workspace.detectionReferences.filter(item =>
+                Number(item.analysisResultId || item.sourceBusinessId || item.id) !== targetId
+            )
+            markDirty()
+        })
+        .catch(() => {})
 }
 
 const generateMonitoringAdvice = () => {
@@ -262,8 +377,8 @@ const generateMonitoringAdvice = () => {
                 <template #default><el-button link type="primary" @click="$emit('refresh-survey')">刷新引用数据</el-button></template>
             </el-alert>
             <div class="section-heading">
-                <div><h3>最新有效病害调查</h3><p>仅引用已提交或已审核的正式调查。</p></div>
-                <el-tag type="success">{{ workspace.survey.status === 'reviewed' ? '已审核' : '已提交' }}</el-tag>
+                <div><h3>最新有效病害调查</h3><p>仅引用已经保存并完成提交的调查数据。</p></div>
+                <el-tag type="success">已保存提交</el-tag>
             </div>
             <dl class="info-grid">
                 <div><dt>调查编号</dt><dd>{{ workspace.survey.surveyCode }}</dd></div>
@@ -323,37 +438,43 @@ const generateMonitoringAdvice = () => {
         <section v-else-if="activeSection === 'detection'" class="paper-section">
             <div class="section-heading">
                 <div><h3>已关联检测结果</h3><p>档案仅保存检测结果ID和摘要，不复制实验原始数据。</p></div>
-                <el-button type="primary" :icon="Link" @click="addDetectionReference">关联检测结果</el-button>
+                <el-button type="primary" :icon="Link" @click="openDetectionDialog">从检测分析选择</el-button>
             </div>
-            <el-table :data="workspace.detectionReferences" border>
+            <el-table v-if="workspace.detectionReferences.length" :data="workspace.detectionReferences" border>
                 <el-table-column prop="experimentName" label="实验名称" min-width="150" />
                 <el-table-column prop="experimentType" label="类型" width="100" />
                 <el-table-column prop="method" label="检测方法" width="120" />
                 <el-table-column prop="instrumentModel" label="仪器型号" min-width="130" />
                 <el-table-column prop="detectionDate" label="检测日期" width="110" />
-                <el-table-column prop="relatedDisease" label="关联病害" width="110" />
-                <el-table-column prop="purpose" label="关联用途" min-width="130" />
+                <el-table-column label="关联病害" min-width="130">
+                    <template #default="{ row }"><el-input v-model="row.relatedDisease" size="small" placeholder="填写关联病害" @input="markDirty" /></template>
+                </el-table-column>
+                <el-table-column label="关联用途" min-width="150">
+                    <template #default="{ row }"><el-input v-model="row.purpose" size="small" placeholder="填写关联用途" @input="markDirty" /></template>
+                </el-table-column>
                 <el-table-column label="操作" width="125" fixed="right">
                     <template #default="{ row }">
-                        <el-button link type="primary" @click="$emit('navigate', 'detection-detail')">查看</el-button>
+                        <el-button link type="primary" @click="$emit('navigate', 'detection-detail', row.analysisResultId || row.sourceBusinessId || row.id)">查看</el-button>
                         <el-button link type="danger" @click="removeDetectionReference(row)">解除</el-button>
                     </template>
                 </el-table-column>
             </el-table>
+            <el-empty v-else description="尚未关联检测分析模块的真实结果" :image-size="70">
+                <el-button type="primary" :icon="Link" @click="openDetectionDialog">选择检测结果</el-button>
+            </el-empty>
             <div v-for="item in workspace.detectionReferences" :key="`conclusion-${item.id}`" class="reference-summary">
                 <b>{{ item.experimentName }}</b>
                 <span>{{ item.conclusion }}</span>
-                <a>{{ item.reportName }}</a>
+                <a v-if="item.reportName">{{ item.reportName }}</a>
             </div>
         </section>
 
         <!-- 05 保护原则与目标 -->
         <section v-else-if="activeSection === 'principle'" class="paper-section editable-section" @input="markDirty" @change="markDirty">
-            <div class="section-heading"><div><h3>档案基本管理信息</h3><p>项目状态与档案状态相互独立，档案编制人与审核人仅作用于本档案。</p></div><el-tag type="primary">可编辑</el-tag></div>
+            <div class="section-heading"><div><h3>档案基本管理信息</h3><p>记录档案标题、编制人和内容摘要，数据保存后可直接导出。</p></div><el-tag type="primary">可编辑</el-tag></div>
             <el-form label-position="top" class="form-grid">
                 <el-form-item label="档案标题" class="span-2"><el-input v-model="archive.archiveTitle" /></el-form-item>
                 <el-form-item label="编制人"><el-input v-model="archive.compiler" /></el-form-item>
-                <el-form-item label="审核人"><el-input v-model="archive.reviewer" /></el-form-item>
                 <el-form-item label="执行摘要" class="span-2"><el-input v-model="archive.executiveSummary" type="textarea" :rows="3" /></el-form-item>
             </el-form>
             <el-divider />
@@ -384,13 +505,20 @@ const generateMonitoringAdvice = () => {
 
         <!-- 06 保护修复方案 -->
         <section v-else-if="activeSection === 'plan'" class="paper-section editable-section" @input="markDirty" @change="markDirty">
-            <div class="section-heading"><div><h3>正式保护修复方案</h3><p>初步处理建议不能替代本方案。</p></div><el-tag type="primary">核心章节</el-tag></div>
+            <div class="section-heading"><div><h3>正式保护修复方案</h3><p>方案可自主维护，修改后直接保存，无需提交申请或等待审批。</p></div><el-tag type="primary">可直接修改</el-tag></div>
+            <el-alert
+                title="方案变更采用直接登记模式"
+                description="数据库仅保存当前方案及修复过程中的调整信息。修改不会覆盖已经完成的过程记录；如需调整未执行步骤，可在修复过程页面继续编辑。"
+                type="info"
+                :closable="false"
+                show-icon
+                class="plan-edit-alert"
+            />
             <el-form label-position="top" class="form-grid">
                 <el-form-item label="方案编号"><el-input v-model="workspace.plan.planCode" /></el-form-item>
                 <el-form-item label="方案名称"><el-input v-model="workspace.plan.planName" /></el-form-item>
-                <el-form-item label="方案状态"><el-select v-model="workspace.plan.planStatus"><el-option label="草稿" value="draft" /><el-option label="待审核" value="submitted" /><el-option label="已批准" value="approved" /></el-select></el-form-item>
+                <el-form-item label="方案状态"><el-select v-model="workspace.plan.planStatus"><el-option label="草稿" value="draft" /><el-option label="已完成" value="completed" /></el-select></el-form-item>
                 <el-form-item label="编制人"><el-input v-model="workspace.plan.compiler" /></el-form-item>
-                <el-form-item label="审核人"><el-input v-model="workspace.plan.reviewer" /></el-form-item>
                 <el-form-item label="编制日期"><el-date-picker v-model="workspace.plan.compiledDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
                 <el-form-item label="方案目标" class="span-2"><el-input v-model="workspace.plan.planGoal" type="textarea" :rows="2" /></el-form-item>
                 <el-form-item label="技术依据" class="span-2"><el-input v-model="workspace.plan.technicalBasis" type="textarea" :rows="2" /></el-form-item>
@@ -561,7 +689,7 @@ const generateMonitoringAdvice = () => {
                 <el-form-item label="评估人员"><el-input v-model="workspace.evaluation.evaluator" /></el-form-item>
                 <el-form-item label="遗留问题" class="span-2"><el-input v-model="workspace.evaluation.remainingIssues" type="textarea" :rows="2" /></el-form-item>
                 <el-form-item label="验收结论" class="span-2"><el-input v-model="workspace.evaluation.acceptanceConclusion" type="textarea" :rows="3" /></el-form-item>
-                <el-form-item label="档案阶段性/最终结论" class="span-2"><el-input v-model="archive.finalConclusion" type="textarea" :rows="3" placeholder="形成可用于提交审核的正式结论" /></el-form-item>
+                <el-form-item label="档案阶段性/最终结论" class="span-2"><el-input v-model="archive.finalConclusion" type="textarea" :rows="3" placeholder="填写可直接保存和导出的正式结论" /></el-form-item>
                 <el-form-item label="评估日期"><el-date-picker v-model="workspace.evaluation.evaluationDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
                 <el-form-item label="关联复测结果"><el-select v-model="workspace.evaluation.retestIds" multiple><el-option v-for="item in workspace.retestOptions" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
             </el-form>
@@ -602,7 +730,7 @@ const generateMonitoringAdvice = () => {
             <el-table :data="filteredAttachments" border>
                 <el-table-column label="文件名称" min-width="190"><template #default="{ row }"><el-button link type="primary">{{ row.fileName }}</el-button></template></el-table-column>
                 <el-table-column prop="fileType" label="类型" width="90" />
-                <el-table-column prop="fileSize" label="大小" width="90" />
+                <el-table-column label="大小" width="90"><template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template></el-table-column>
                 <el-table-column prop="sourceModule" label="来源模块" width="120" />
                 <el-table-column prop="sectionName" label="所属章节" min-width="120" />
                 <el-table-column prop="uploadedBy" label="上传人" width="90" />
@@ -611,13 +739,114 @@ const generateMonitoringAdvice = () => {
                 <el-table-column prop="description" label="说明" min-width="160" show-overflow-tooltip />
                 <el-table-column label="操作" width="145" fixed="right">
                     <template #default="{ row }">
-                        <el-button link type="primary">预览</el-button>
-                        <el-button link type="primary">下载</el-button>
+                        <el-button link type="primary" @click="openAttachment(row)">预览</el-button>
+                        <el-button link type="primary" @click="openAttachment(row, true)">下载</el-button>
                         <el-button link type="danger" @click="deleteAttachment(row)">删除</el-button>
                     </template>
                 </el-table-column>
             </el-table>
         </section>
+
+        <!-- 真实检测结果选择Dialog -->
+        <el-dialog
+            v-model="detectionDialogVisible"
+            title="从检测分析模块选择真实结果"
+            width="min(1050px, 96vw)"
+            destroy-on-close
+        >
+            <div class="detection-picker">
+                <el-alert
+                    :title="`当前文物：${project.artifactCode || '未填写编号'} · ${project.artifactName || '未填写名称'}`"
+                    description="列表按文物编号精确匹配检测分析数据；项目未填写文物编号时，才按文物名称匹配。"
+                    type="info"
+                    :closable="false"
+                    show-icon
+                />
+                <div class="detection-toolbar">
+                    <el-input
+                        v-model="detectionFilters.keyword"
+                        :prefix-icon="Search"
+                        clearable
+                        placeholder="搜索实验、方法、仪器、结论或取样部位"
+                    />
+                    <el-select v-model="detectionFilters.status" clearable placeholder="全部结果状态">
+                        <el-option label="已有实验内容" value="has_result" />
+                        <el-option label="已完成" value="已完成" />
+                        <el-option label="检测中" value="检测中" />
+                        <el-option label="待检测" value="待检测" />
+                    </el-select>
+                </div>
+
+                <el-table
+                    v-loading="detectionLoading"
+                    :data="filteredDetectionCandidates"
+                    row-key="analysisResultId"
+                    border
+                    max-height="390"
+                    @selection-change="onDetectionSelection"
+                >
+                    <el-table-column type="selection" width="45" reserve-selection :selectable="detectionSelectable" />
+                    <el-table-column prop="experimentName" label="实验/检测项目" min-width="145" show-overflow-tooltip />
+                    <el-table-column prop="method" label="检测方法" min-width="125" show-overflow-tooltip />
+                    <el-table-column prop="instrumentModel" label="仪器型号" min-width="120" show-overflow-tooltip />
+                    <el-table-column label="状态" width="92">
+                        <template #default="{ row }">
+                            <el-tag :type="row.resultStatus === '已完成' ? 'success' : row.hasResult ? 'warning' : 'info'" size="small">
+                                {{ row.resultStatus || (row.hasResult ? '已有内容' : '未录结果') }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="detectionDate" label="检测日期" width="110" />
+                    <el-table-column prop="conclusion" label="检测结论" min-width="190" show-overflow-tooltip />
+                    <el-table-column label="关联情况" width="90">
+                        <template #default="{ row }">
+                            <el-tag v-if="!detectionSelectable(row)" type="info" size="small">已关联</el-tag>
+                            <span v-else>可选择</span>
+                        </template>
+                    </el-table-column>
+                </el-table>
+
+                <el-empty
+                    v-if="!detectionLoading && !filteredDetectionCandidates.length"
+                    description="未找到当前文物的检测分析结果"
+                    :image-size="80"
+                >
+                    <el-button type="primary" plain @click="$emit('navigate', 'detection-overview')">前往检测分析模块录入</el-button>
+                </el-empty>
+
+                <el-form label-position="top" class="detection-link-form">
+                    <el-form-item label="关联病害（可选）">
+                        <el-select
+                            v-model="detectionLinkForm.relatedDiseaseIds"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                            placeholder="选择该结果支持的病害记录"
+                        >
+                            <el-option
+                                v-for="item in workspace.diseaseRecords"
+                                :key="item.id"
+                                :label="`${item.diseaseName} · ${item.partName || '未填写部位'}`"
+                                :value="item.id"
+                            />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="档案引用用途">
+                        <el-input v-model="detectionLinkForm.purpose" placeholder="例如：保护修复技术依据" />
+                    </el-form-item>
+                </el-form>
+            </div>
+            <template #footer>
+                <el-button @click="detectionDialogVisible = false">取消</el-button>
+                <el-button
+                    type="primary"
+                    :disabled="!selectedDetectionCandidates.length"
+                    @click="confirmDetectionReferences"
+                >
+                    关联所选结果（{{ selectedDetectionCandidates.length }}）
+                </el-button>
+            </template>
+        </el-dialog>
 
         <!-- 材料Dialog -->
         <el-dialog v-model="materialDialogVisible" :title="materialEditingId ? '编辑计划材料' : '添加计划材料'" width="720px" destroy-on-close>
@@ -673,18 +902,21 @@ const generateMonitoringAdvice = () => {
         </el-dialog>
 
         <!-- 附件Dialog -->
-        <el-dialog v-model="attachmentDialogVisible" title="上传档案附件（Mock）" width="620px">
-            <el-alert title="后端附件接口接入后，此处将替换为文件上传组件。" type="info" :closable="false" />
+        <el-dialog v-model="attachmentDialogVisible" title="上传档案附件" width="620px">
             <el-form label-position="top" class="form-grid dialog-form">
-                <el-form-item label="文件名称"><el-input v-model="attachmentForm.fileName" /></el-form-item>
+                <el-form-item label="选择文件" class="span-2">
+                    <el-upload :auto-upload="false" :limit="1" :on-change="selectAttachmentFile">
+                        <el-button :icon="Upload">选择文件</el-button>
+                        <template #tip><div class="el-upload__tip">单个文件不超过 50MB，文件内容将保存到 MySQL。</div></template>
+                    </el-upload>
+                </el-form-item>
                 <el-form-item label="文件类型"><el-select v-model="attachmentForm.fileType"><el-option v-for="item in ['报告','照片','视频','图纸','表格','材料说明','三维模型','其他']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
                 <el-form-item label="来源模块"><el-select v-model="attachmentForm.sourceModule"><el-option v-for="item in ['病害调查','检测分析','保护修复方案','修复过程','修复前后对比','复原成果','后续监测','档案自身附件']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
                 <el-form-item label="所属章节"><el-input v-model="attachmentForm.sectionName" /></el-form-item>
-                <el-form-item label="文件大小"><el-input v-model="attachmentForm.fileSize" placeholder="如 2.4 MB" /></el-form-item>
                 <el-form-item label="版本"><el-input v-model="attachmentForm.version" /></el-form-item>
                 <el-form-item label="说明" class="span-2"><el-input v-model="attachmentForm.description" type="textarea" :rows="2" /></el-form-item>
             </el-form>
-            <template #footer><el-button @click="attachmentDialogVisible = false">取消</el-button><el-button type="primary" @click="addAttachment">添加附件</el-button></template>
+            <template #footer><el-button @click="attachmentDialogVisible = false">取消</el-button><el-button type="primary" :loading="attachmentUploading" @click="addAttachment">上传附件</el-button></template>
         </el-dialog>
     </article>
 </template>
@@ -743,6 +975,7 @@ const generateMonitoringAdvice = () => {
 .span-2 { grid-column: 1 / -1; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-date-editor) { width: 100%; }
 .plan-detail { margin-top: 22px; }
+.plan-edit-alert { margin-bottom: 18px; }
 .material-note { grid-template-columns: 100px repeat(3, 1fr); }
 .timeline-title { display: flex; align-items: center; gap: 10px; }
 .timeline-title + p { margin: 6px 0; color: #86909c; font-size: 11px; }
@@ -764,6 +997,9 @@ const generateMonitoringAdvice = () => {
 .repair { color: #8b6515; background: #fff4d8; }
 .inferred { color: #7b4f91; background: #f3eaf7; }
 .attachment-filter { display: grid; grid-template-columns: minmax(200px, 1fr) 150px 130px; gap: 10px; margin-bottom: 14px; }
+.detection-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 10px; margin: 14px 0; }
+.detection-link-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin-top: 16px; padding: 14px 16px 0; background: #f7f8fa; border-radius: 7px; }
+.detection-link-form :deep(.el-select) { width: 100%; }
 .dialog-form { margin-top: 14px; }
 @media (max-width: 1100px) {
     .archive-paper { padding: 28px; }
@@ -782,7 +1018,7 @@ const generateMonitoringAdvice = () => {
     .stat-strip { grid-template-columns: repeat(3, 1fr); }
     .stat-strip div { border-bottom: 1px solid #e5e6eb; }
     .result-item { grid-template-columns: 1fr; }
-    .attachment-filter { grid-template-columns: 1fr; }
+    .attachment-filter, .detection-toolbar, .detection-link-form { grid-template-columns: 1fr; }
     .reference-summary { grid-template-columns: 1fr; }
 }
 </style>

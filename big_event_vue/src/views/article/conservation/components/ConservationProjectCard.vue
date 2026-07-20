@@ -90,7 +90,8 @@ const handleMore = (cmd) => {
         </div>
         <div v-if="project.restorationSummary" class="restoration-summary">
             <b>复原成果：{{ project.restorationSummary.total }}项 · 已完成{{ project.restorationSummary.completed }}项</b>
-            <span>实体 {{ project.restorationSummary.physical }}项 · 数字 {{ project.restorationSummary.digital }}项</span>
+            <span>实体 {{ project.restorationSummary.physical }}项 · 数字 {{ project.restorationSummary.digital }}项 · 进行中 {{ project.restorationSummary.processing }}项</span>
+            <span>收入档案 {{ project.restorationSummary.selectedForArchive }}项</span>
             <small v-if="project.restorationSummary.recommended">推荐：{{ project.restorationSummary.recommended }}</small>
         </div>
         <div v-if="project.monitoringSummary" class="monitoring-summary">

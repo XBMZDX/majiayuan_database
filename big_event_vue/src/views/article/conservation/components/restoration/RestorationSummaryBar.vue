@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Check, Collection, Connection, Files, Menu, Plus, Promotion } from '@element-plus/icons-vue'
+import { Check, Connection, Files, Menu, Plus, Promotion } from '@element-plus/icons-vue'
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -9,14 +9,14 @@ const props = defineProps({
     saving: Boolean,
     dirty: Boolean
 })
-defineEmits(['create', 'from-steps', 'from-comparisons', 'save', 'complete', 'version', 'comparison', 'archive', 'open-list'])
+defineEmits(['create', 'from-steps', 'from-comparisons', 'save', 'version', 'comparison', 'archive', 'open-list'])
 
 const stats = computed(() => ({
     physical: props.results.filter(item => ['physical', 'hybrid'].includes(item.restorationType)).length,
     d2: props.results.filter(item => item.restorationType === 'digital_2d').length,
     d3: props.results.filter(item => ['digital_3d', 'hybrid'].includes(item.restorationType)).length,
-    processing: props.results.filter(item => ['draft', 'in_progress', 'returned'].includes(item.resultStatus)).length,
-    completed: props.results.filter(item => ['completed', 'reviewed', 'archived'].includes(item.resultStatus)).length,
+    processing: props.results.filter(item => ['draft', 'in_progress'].includes(item.resultStatus)).length,
+    completed: props.results.filter(item => item.resultStatus === 'completed').length,
     archived: props.results.filter(item => item.selectedForArchive).length,
     monitoring: props.results.filter(item => item.requiresMonitoring).length
 }))
@@ -31,7 +31,7 @@ const stats = computed(() => ({
         <div class="stats">
             <div><b>{{ results.length }}</b><span>成果</span></div><div><b>{{ stats.physical }}</b><span>实体</span></div>
             <div><b>{{ stats.d2 }}</b><span>二维</span></div><div><b>{{ stats.d3 }}</b><span>三维</span></div>
-            <div><b>{{ stats.processing }}</b><span>制作中</span></div><div><b>{{ stats.completed }}</b><span>已完成</span></div>
+            <div><b>{{ stats.processing }}</b><span>记录中</span></div><div><b>{{ stats.completed }}</b><span>资料完整</span></div>
             <div><b>{{ stats.archived }}</b><span>入档</span></div><div><b>{{ stats.monitoring }}</b><span>监测</span></div>
         </div>
         <div class="actions">
@@ -39,7 +39,6 @@ const stats = computed(() => ({
             <el-button :icon="Promotion" @click="$emit('from-steps')">从修复步骤生成</el-button>
             <el-button :icon="Connection" @click="$emit('from-comparisons')">从前后对比生成</el-button>
             <el-button v-if="current" :type="dirty ? 'warning' : 'default'" :loading="saving" :icon="Check" @click="$emit('save')">{{ dirty ? '保存当前成果*' : '保存当前成果' }}</el-button>
-            <el-button v-if="current && ['draft','in_progress','returned'].includes(current.resultStatus)" type="success" :icon="Collection" @click="$emit('complete')">完成成果</el-button>
             <el-dropdown>
                 <el-button :icon="Files">更多</el-button>
                 <template #dropdown><el-dropdown-menu>
@@ -61,4 +60,3 @@ h1 { margin: 4px 0; color: #253a33; font-size: 20px; }p { margin: 0; color: #879
 @media (max-width:1280px){.summary{grid-template-columns:1fr;grid-template-areas:"identity" "stats" "actions"}.stats,.actions{justify-content:flex-start}.stats div:first-child{border-left:0;padding-left:0}}
 @media (max-width:920px){.summary{padding:12px 14px}.mobile-menu{display:inline-flex}.stats{overflow-x:auto}.stats div{min-width:55px;padding:0 7px}}
 </style>
-

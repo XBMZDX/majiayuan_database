@@ -1,6 +1,19 @@
 import request from '@/utils/request'
 
-export const USE_CONSERVATION_PROCESS_MOCK = true
+export const getProcessWorkbench = projectId =>
+    request.get(`/conservation/projects/${projectId}/process-workbench`)
+
+export const saveProcessWorkbench = (processId, processRecord, steps) =>
+    request.put(`/conservation/processes/${processId}/workbench`, { processRecord, steps })
+
+export const uploadProcessMedia = (stepId, formData) =>
+    request.post(`/conservation/process-steps/${stepId}/media`, formData)
+
+export const getProcessMediaContent = mediaId =>
+    request.get(`/conservation/process-media/${mediaId}/content`, { responseType: 'blob' })
+
+export const deleteProcessMedia = mediaId =>
+    request.delete(`/conservation/process-media/${mediaId}`)
 
 export const getProcessProject = projectId => request.get(`/conservation/projects/${projectId}`)
 export const getProcessArchive = projectId => request.get(`/conservation/projects/${projectId}/archive`)
