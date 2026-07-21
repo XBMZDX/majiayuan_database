@@ -24,7 +24,6 @@ const uploading = ref(false)
 const project = ref(null)
 const survey = ref({})
 const diseaseRecords = ref([])
-const diseaseTypes = ref([])
 const activeDisease = ref(null)
 const annotationMedia = ref(null)
 const annotationVisible = ref(false)
@@ -38,7 +37,6 @@ const applyWorkbench = (data, preferredIndex = null) => {
     project.value = data.project
     survey.value = data.survey || {}
     diseaseRecords.value = data.records || []
-    diseaseTypes.value = data.diseaseTypes || []
     const previousId = activeDisease.value?.id
     activeDisease.value = (preferredIndex !== null ? diseaseRecords.value[preferredIndex] : null)
         || diseaseRecords.value.find(item => item.id === previousId)
@@ -87,6 +85,7 @@ const addDisease = () => {
         surveyId: survey.value.id,
         projectId: projectId.value,
         diseaseTypeId: null,
+        diseaseType: '',
         diseaseName: '',
         diseaseCategory: '',
         severity: 'minor',
@@ -97,6 +96,7 @@ const addDisease = () => {
         side: '',
         positionDescription: '',
         morphology: '',
+        causeFactors: [],
         causeAnalysis: '',
         structuralImpact: 'none',
         emergency: false,
@@ -176,9 +176,15 @@ const uploadMedia = async files => {
     }
 }
 
-const openAnnotator = media => {
-    annotationMedia.value = media
-    annotationVisible.value = true
+const openAnnotator = async media => {
+    try {
+        if (!media?.id) return ElMessage.warning('图片尚未保存，暂时不能标注')
+        if (!media.displayUrl) await loadMediaPreview(media)
+        annotationMedia.value = media
+        annotationVisible.value = true
+    } catch (error) {
+        ElMessage.error(error?.message || '病害图片加载失败，无法打开标注')
+    }
 }
 
 const saveAnnotations = async annotations => {
@@ -241,7 +247,6 @@ onBeforeUnmount(() => {
             <DiseaseSurveyPaper
                 :survey="survey"
                 :activeDisease="activeDisease"
-                :diseaseTypes="diseaseTypes"
                 :uploading="uploading"
                 @update:survey="updateSurvey"
                 @update:disease="updateDisease"

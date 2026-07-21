@@ -6,7 +6,6 @@ import { Camera, Delete, EditPen, UploadFilled } from '@element-plus/icons-vue'
 const props = defineProps({
     survey: Object,
     activeDisease: Object,
-    diseaseTypes: Array,
     uploading: Boolean
 })
 const emit = defineEmits([
@@ -22,22 +21,17 @@ watch(surveyForm, onSurveyChange, { deep: true })
 
 // Section 2: 病害基本信息
 const diseaseForm = ref({})
-watch(() => props.activeDisease, (v) => { diseaseForm.value = { ...(v || {}) } }, { immediate: true })
+watch(() => props.activeDisease, (v) => {
+    diseaseForm.value = {
+        ...(v || {}),
+        causeFactors: Array.isArray(v?.causeFactors) ? [...v.causeFactors] : []
+    }
+}, { immediate: true })
 const onDiseaseChange = () => emit('update:disease', { ...diseaseForm.value })
 watch(diseaseForm, onDiseaseChange, { deep: true })
 
-const onTypeChange = (typeId) => {
-    const t = props.diseaseTypes?.find(d => d.id === typeId)
-    if (t) {
-        diseaseForm.value.diseaseName = t.name || diseaseForm.value.diseaseName
-        diseaseForm.value.diseaseCategory = t.category || diseaseForm.value.diseaseCategory
-    }
-}
-
 // Section 5: 成因因素
 const causeFactors = ['自然环境','埋藏环境','人为活动','实验室环境变化','材质自身因素','温湿度波动','水盐迁移','氧化腐蚀','微生物作用','机械外力','其他']
-const selectedFactors = ref([])
-watch(() => props.activeDisease, () => { selectedFactors.value = [] })
 
 const chooseImages = () => imageInput.value?.click()
 const onImagesSelected = event => {
@@ -80,13 +74,15 @@ const onImagesSelected = event => {
             <h3>病害基本信息</h3>
             <el-form :model="diseaseForm" label-width="90px" size="small" @change="onDiseaseChange">
                 <el-row :gutter="16">
-                    <el-col :span="8"><el-form-item label="病害类型">
-                        <el-select v-model="diseaseForm.diseaseTypeId" style="width:100%" @change="onTypeChange">
-                            <el-option v-for="t in diseaseTypes" :key="t.id" :label="t.name" :value="t.id" />
+                    <el-col :span="8"><el-form-item label="病害类别">
+                        <el-select v-model="diseaseForm.diseaseCategory" style="width:100%" placeholder="请选择病害类别">
+                            <el-option label="物理病害" value="物理病害" />
+                            <el-option label="生物病害" value="生物病害" />
+                            <el-option label="化学病害" value="化学病害" />
                         </el-select>
                     </el-form-item></el-col>
+                    <el-col :span="8"><el-form-item label="病害类型"><el-input v-model="diseaseForm.diseaseType" placeholder="请输入病害类型" /></el-form-item></el-col>
                     <el-col :span="8"><el-form-item label="病害名称"><el-input v-model="diseaseForm.diseaseName" /></el-form-item></el-col>
-                    <el-col :span="8"><el-form-item label="病害类别"><el-input v-model="diseaseForm.diseaseCategory" /></el-form-item></el-col>
                     <el-col :span="8"><el-form-item label="严重程度">
                         <el-select v-model="diseaseForm.severity" style="width:100%">
                             <el-option label="轻微" value="minor" /><el-option label="中度" value="moderate" /><el-option label="严重" value="severe" /><el-option label="危急" value="critical" />
@@ -144,7 +140,7 @@ const onImagesSelected = event => {
                         <span>{{ media.annotations?.length || 0 }} 个标注</span>
                     </div>
                     <div class="media-actions">
-                        <el-button size="small" type="primary" plain :icon="EditPen" @click="emit('annotate-media', media)">
+                        <el-button size="small" type="primary" plain :icon="EditPen" @click.stop="emit('annotate-media', media)">
                             图片标注
                         </el-button>
                         <el-button size="small" type="danger" link :icon="Delete" @click="emit('delete-media', media)">
@@ -161,7 +157,7 @@ const onImagesSelected = event => {
         <div class="section">
             <h3>成因分析</h3>
             <div style="margin-bottom:10px">
-                <el-checkbox-group v-model="selectedFactors" size="small">
+                <el-checkbox-group v-model="diseaseForm.causeFactors" size="small">
                     <el-checkbox v-for="f in causeFactors" :key="f" :label="f" style="margin-right:12px;margin-bottom:6px">{{ f }}</el-checkbox>
                 </el-checkbox-group>
             </div>

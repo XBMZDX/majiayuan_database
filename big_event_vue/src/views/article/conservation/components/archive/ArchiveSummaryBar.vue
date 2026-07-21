@@ -10,7 +10,7 @@ const props = defineProps({
     dirty: Boolean
 })
 
-defineEmits(['save', 'finalize', 'revision', 'export', 'back', 'open-nav'])
+defineEmits(['save', 'next', 'finalize', 'revision', 'export', 'back', 'open-nav'])
 
 const statusInfo = computed(() => {
     const map = {
@@ -60,6 +60,7 @@ const stageText = computed(() => {
 
         <div class="summary-actions">
             <el-button :icon="FolderOpened" :loading="saving" @click="$emit('save')">保存草稿</el-button>
+            <el-button type="primary" plain :loading="saving" @click="$emit('next')">保存草稿并进入修复过程</el-button>
             <el-button type="primary" :icon="CircleCheck" @click="$emit('finalize')">保存定稿</el-button>
             <el-dropdown @command="command => $emit(command)">
                 <el-button :icon="MoreFilled">更多</el-button>

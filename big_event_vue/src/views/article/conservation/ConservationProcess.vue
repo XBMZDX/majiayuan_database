@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Refresh, Setting, Tools } from '@element-plus/icons-vue'
+import { Refresh, Setting, Tools } from '@element-plus/icons-vue'
 import ProcessSummaryBar from './components/process/ProcessSummaryBar.vue'
 import ProcessStepList from './components/process/ProcessStepList.vue'
 import ProcessStepPaper from './components/process/ProcessStepPaper.vue'
@@ -174,7 +174,6 @@ const loadPage = async () => {
 }
 
 const generateProcess = async () => {
-    if (!formalPlan.value || formalPlan.value.planStatus !== 'completed') return
     loading.value = true
     try {
         const result = await createProcessApi(projectId.value)
@@ -182,7 +181,9 @@ const generateProcess = async () => {
         activeStepId.value = steps.value[0]?.id
         dirty.value = false
         recalculateAll()
-        ElMessage.success(`已从正式方案生成${steps.value.length}个修复执行步骤`)
+        ElMessage.success(steps.value.length
+            ? `已从当前方案内容生成${steps.value.length}个修复执行步骤`
+            : '已建立空白修复过程，可以手工新增步骤')
     } catch (error) {
         ElMessage.error(error.message || '生成修复过程失败')
     } finally {
@@ -191,7 +192,7 @@ const generateProcess = async () => {
 }
 
 const saveCurrentStep = async (showMessage = true) => {
-    if (!processRecord.value || !activeStep.value) return
+    if (!processRecord.value || !activeStep.value) return false
     saving.value = true
     try {
         recalculateAll()
@@ -203,8 +204,10 @@ const saveCurrentStep = async (showMessage = true) => {
         activeStepId.value = steps.value.find(item => item.id === currentId)?.id || steps.value[0]?.id
         dirty.value = false
         if (showMessage) ElMessage.success(`当前步骤已保存：${processRecord.value.updateTime}`)
+        return true
     } catch (error) {
         ElMessage.error(error.message || '保存失败，请稍后重试')
+        return false
     } finally {
         saving.value = false
     }
@@ -349,7 +352,7 @@ const openTempStep = (parent = null) => {
 const createTempStep = async () => {
     if (!tempStepForm.stepName || !tempStepForm.temporaryReason || !tempStepForm.plannedMethod) return ElMessage.warning('请填写步骤名称、新增原因和计划方法')
     const insertIndex = steps.value.findIndex(item => item.id === tempStepForm.insertAfterId)
-    const selectedDiseases = archiveWorkspace.value.diseaseRecords
+    const selectedDiseases = (archiveWorkspace.value?.diseaseRecords || [])
         .filter(item => tempStepForm.diseaseIds.includes(item.id))
         .map(item => ({
             id: Date.now() + item.id, diseaseRecordId: item.id, diseaseName: item.diseaseName,
@@ -435,6 +438,7 @@ const confirmSkip = () => {
 }
 
 const syncFromPlan = async () => {
+    if (!archiveWorkspace.value) return ElMessage.info('当前没有档案方案，可直接新增手工步骤')
     if (processRecord.value.processStatus !== 'not_started') {
         return ElMessage.info('过程已开始，可直接修改正式方案；为保留历史记录，已开始的执行步骤不会自动重建。')
     }
@@ -445,6 +449,11 @@ const syncFromPlan = async () => {
     dirty.value = false
     recalculateAll()
     ElMessage.success('已重新同步正式方案')
+}
+const saveAndContinue = async () => {
+    if (activeStep.value && !(await saveCurrentStep(false))) return
+    dirty.value = false
+    router.push(`/conservation/project/${projectId.value}/comparison`)
 }
 
 const selectStep = id => {
@@ -511,26 +520,18 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
             <template #extra><el-button type="primary" @click="router.push('/conservation/overview')">返回保护修复总览</el-button></template>
         </el-result>
 
-        <el-result v-else-if="!archive" icon="warning" title="当前项目尚未建立保护修复档案" sub-title="建立正式档案后才能从方案生成修复执行过程。">
-            <template #extra><el-button type="primary" :icon="Document" @click="router.push(`/conservation/project/${projectId}/archive`)">前往保护修复档案</el-button></template>
-        </el-result>
-
-        <el-result v-else-if="!formalPlan || formalPlan.planStatus!=='completed'" icon="warning" title="当前档案尚未完成保护修复方案" sub-title="请先在保护修复档案中完善方案并将方案状态设为“已完成”。">
-            <template #extra><el-button type="primary" @click="router.push(`/conservation/project/${projectId}/archive?section=plan`)">前往编制方案</el-button></template>
-        </el-result>
-
         <div v-else-if="!processRecord" class="empty-process">
             <div class="empty-icon"><el-icon><Tools /></el-icon></div>
             <h2>当前项目尚未建立修复执行过程</h2>
-            <p>可以根据已提交的正式保护修复方案，自动生成修复步骤，并开始记录实际操作。</p>
-            <div class="source-summary">
-                <span>正式方案：{{ formalPlan.planName }}</span>
-                <span>方案状态：{{ formalPlan.planStatus }}</span>
-                <span>方案措施：{{ archiveWorkspace.planDiseaseList.length }}项</span>
-                <span>计划材料：{{ archiveWorkspace.planMaterials.length }}种</span>
+            <p>档案和方案无需完成。可以引用当前方案草稿，也可以建立空白过程后手工新增步骤。</p>
+            <div v-if="formalPlan" class="source-summary">
+                <span>当前方案：{{ formalPlan.planName || '未命名方案' }}</span>
+                <span>方案状态：{{ formalPlan.planStatus || 'draft' }}</span>
+                <span>方案措施：{{ archiveWorkspace?.planDiseaseList?.length || 0 }}项</span>
+                <span>计划材料：{{ archiveWorkspace?.planMaterials?.length || 0 }}种</span>
             </div>
-            <el-button type="primary" size="large" :icon="Tools" @click="generateProcess">从正式方案生成修复过程</el-button>
-            <el-button size="large" @click="router.push(`/conservation/project/${projectId}/archive`)">返回保护修复档案</el-button>
+            <el-alert v-else title="当前未建立档案，将创建不关联档案的空白修复过程。" type="info" :closable="false" />
+            <el-button type="primary" size="large" :icon="Tools" @click="generateProcess">{{ formalPlan ? '从当前方案草稿建立过程' : '建立空白修复过程' }}</el-button>
         </div>
 
         <template v-else>
@@ -551,6 +552,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                 @archive="navigate('archive')"
                 @plan="navigate('plan')"
                 @rework="openTempStep(activeStep)"
+                @next="saveAndContinue"
                 @open-nav="mobileStepsVisible = true"
             />
 

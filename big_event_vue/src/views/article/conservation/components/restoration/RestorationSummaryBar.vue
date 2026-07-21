@@ -38,7 +38,7 @@ const stats = computed(() => ({
             <el-button type="primary" :icon="Plus" @click="$emit('create')">新建成果</el-button>
             <el-button :icon="Promotion" @click="$emit('from-steps')">从修复步骤生成</el-button>
             <el-button :icon="Connection" @click="$emit('from-comparisons')">从前后对比生成</el-button>
-            <el-button v-if="current" :type="dirty ? 'warning' : 'default'" :loading="saving" :icon="Check" @click="$emit('save')">{{ dirty ? '保存当前成果*' : '保存当前成果' }}</el-button>
+            <el-button v-if="current" :type="dirty ? 'warning' : 'default'" :loading="saving" :icon="Check" @click="$emit('save')">{{ dirty ? '保存草稿*' : '保存草稿' }}</el-button>
             <el-dropdown>
                 <el-button :icon="Files">更多</el-button>
                 <template #dropdown><el-dropdown-menu>

@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Picture, Refresh, Setting } from '@element-plus/icons-vue'
+import { Picture, Refresh, Setting } from '@element-plus/icons-vue'
 import ComparisonSummaryBar from './components/comparison/ComparisonSummaryBar.vue'
 import ComparisonGroupList from './components/comparison/ComparisonGroupList.vue'
 import ComparisonWorkspace from './components/comparison/ComparisonWorkspace.vue'
@@ -32,6 +32,7 @@ const dirty = ref(false)
 const editingCompleted = ref(false)
 const createDialog = ref(false)
 const createStep = ref(0)
+const createFromProcess = ref(false)
 const mobileListVisible = ref(false)
 const assistDrawerVisible = ref(false)
 const workspaceRef = ref(null)
@@ -66,7 +67,7 @@ const baseEvaluation = () => ({
 })
 const createEmptyComparison = (project, context, seed = Date.now()) => ({
     id: seed, projectId: project.id, artifactId: project.artifactId,
-    processId: context.process.id, stepId: null,
+    processId: context.process?.id || null, stepId: null,
     comparisonCode: `CMP-${String(project.artifactCode || project.id).replace(/[^A-Za-z0-9]/g, '')}-${String(seed).slice(-3)}`,
     comparisonTitle: '', comparisonType: 'before_after', targetPart: '', shootingPosition: '',
     beforeSummary: '', afterSummary: '', comparisonDescription: '', overallEffect: '',
@@ -199,7 +200,7 @@ const loadPage = async () => {
 }
 
 const saveCurrent = async (showMessage = true) => {
-    if (!current.value) return
+    if (!current.value) return false
     saving.value = true
     try {
         current.value.evaluation.overallScore = Number(current.value.evaluation.overallScore || 0)
@@ -212,14 +213,20 @@ const saveCurrent = async (showMessage = true) => {
         await hydrateMedia()
         dirty.value = false
         if (showMessage) ElMessage.success(`当前对比已保存：${current.value.updateTime}`)
+        return true
     } catch (error) {
         ElMessage.error(error.message || '保存失败，请稍后重试')
+        return false
     } finally {
         saving.value = false
     }
 }
 
 const openCreate = (autoSelect = false) => {
+    if (autoSelect && (!processRecord.value || !sourceMedia.value.length)) {
+        return ElMessage.info('当前没有可引用的修复过程影像，可使用“新建对比组”建立空白草稿')
+    }
+    createFromProcess.value = autoSelect
     createStep.value = 0
     selectedMediaIds.value = []
     const firstStep = steps.value.find(step => step.media?.some(item => item.selectedForComparison))
@@ -256,17 +263,16 @@ const toggleMedia = media => {
     else selectedMediaIds.value.push(media.id)
 }
 const nextCreateStep = () => {
-    if (createStep.value === 0 && !createForm.stepId) return ElMessage.warning('请先选择关联修复步骤')
-    if (createStep.value === 0 && !createForm.diseaseIds.length && !createForm.overallComparison) return ElMessage.warning('请关联病害或标记为整体效果对比')
-    if (createStep.value === 1 && (!createHasBefore.value || !createHasAfter.value)) return ElMessage.warning('至少选择一张修复前和一张修复后影像')
+    if (createFromProcess.value && createStep.value === 0 && !createForm.stepId) return ElMessage.warning('请先选择关联修复步骤')
+    if (createFromProcess.value && createStep.value === 1 && (!createHasBefore.value || !createHasAfter.value)) return ElMessage.warning('至少选择一张修复前和一张修复后影像')
     createStep.value += 1
 }
 const createGroup = () => {
-    if (!createForm.comparisonTitle || !createForm.targetPart) return ElMessage.warning('请填写对比标题和目标部位')
     const group = createEmptyComparison(project.value, { process: processRecord.value })
     const step = steps.value.find(item => item.id === createForm.stepId)
     Object.assign(group, {
         ...createForm,
+        comparisonTitle: createForm.comparisonTitle?.trim() || `未命名对比草稿${groups.value.length + 1}`,
         images: selectedMedia.value.map((media, index) => ({
             id: Date.now() + index, sourceMediaId: media.sourceMediaId || media.id,
             imageStage: media.imageStage, imageRole: media.imageRole, fileName: media.fileName,
@@ -286,7 +292,8 @@ const createGroup = () => {
     })
     if (!group.beforeSummary) group.beforeSummary = group.diseases.map(item => item.beforeStatus).join('；')
     group.monitoring.reviewPart = createForm.targetPart
-    group.comparisonDescription = createForm.comparisonDescription || `引用“${step?.stepName}”过程影像建立的修复效果对比。`
+    group.comparisonDescription = createForm.comparisonDescription
+        || (step ? `引用“${step.stepName}”过程影像建立的修复效果对比。` : '手工建立的空白前后对比草稿。')
     groups.value.unshift(group)
     activeId.value = group.id
     createDialog.value = false
@@ -394,6 +401,11 @@ const navigate = async target => {
     dirty.value = false
     router.push(paths[target])
 }
+const saveAndContinue = async () => {
+    if (current.value && !(await saveCurrent(false))) return
+    dirty.value = false
+    router.push(`/conservation/project/${projectId.value}/restoration`)
+}
 const confirmDiscard = async () => {
     if (!dirty.value) return true
     try {
@@ -438,14 +450,6 @@ onBeforeUnmount(() => {
             <template #extra><el-button type="primary" @click="router.push('/conservation/overview')">返回保护修复总览</el-button></template>
         </el-result>
 
-        <el-result v-else-if="!processRecord" icon="warning" title="当前项目尚未建立修复过程，无法创建修复前后对比" sub-title="请先建立修复步骤，并记录操作前、操作中和操作后影像。">
-            <template #extra><el-button type="primary" :icon="Document" @click="router.push(`/conservation/project/${projectId}/process`)">前往修复过程记录</el-button></template>
-        </el-result>
-
-        <el-result v-else-if="!sourceMedia.length" icon="warning" title="当前修复过程尚无可用于对比的操作前或操作后影像">
-            <template #extra><el-button type="primary" :icon="Picture" @click="router.push(`/conservation/project/${projectId}/process`)">前往修复过程上传影像</el-button></template>
-        </el-result>
-
         <template v-else>
             <ComparisonSummaryBar
                 :project="project"
@@ -460,6 +464,7 @@ onBeforeUnmount(() => {
                 @batch-archive="batchArchive"
                 @process="navigate('process')"
                 @archive="navigate('archive')"
+                @restoration="saveAndContinue"
                 @open-list="mobileListVisible = true"
             />
 
@@ -505,9 +510,9 @@ onBeforeUnmount(() => {
             <div v-else class="empty-comparison">
                 <div class="empty-visual"><el-icon><Picture /></el-icon></div>
                 <h2>当前项目尚未建立修复前后对比组</h2>
-                <p>从修复过程影像中选择相同部位、相同角度的操作前和操作后照片，建立专业效果评价证据。</p>
+                <p>可以先建立空白草稿，修复过程、前后影像及评价信息均可稍后补充，不影响进入后续页面。</p>
                 <div class="empty-flow"><span>选择步骤</span><i>→</i><span>匹配前后影像</span><i>→</i><span>填写评价</span><i>→</i><span>形成监测基准</span></div>
-                <el-button type="primary" size="large" :icon="Picture" @click="openCreate(true)">从过程影像生成</el-button>
+                <el-button v-if="processRecord && sourceMedia.length" type="primary" size="large" :icon="Picture" @click="openCreate(true)">从过程影像生成</el-button>
                 <el-button size="large" @click="openCreate(false)">新建空白对比组</el-button>
             </div>
         </template>
@@ -539,7 +544,7 @@ onBeforeUnmount(() => {
         />
     </el-drawer>
 
-    <el-dialog v-model="createDialog" title="从修复过程建立对比组" width="min(920px, 96vw)" top="5vh" destroy-on-close>
+    <el-dialog v-model="createDialog" :title="createFromProcess ? '从修复过程建立对比组' : '新建对比草稿'" width="min(920px, 96vw)" top="5vh" destroy-on-close>
         <el-steps :active="createStep" align-center finish-status="success">
             <el-step title="关联信息" description="步骤、病害与部位" />
             <el-step title="选择影像" description="前图、后图与过程图" />
@@ -549,7 +554,7 @@ onBeforeUnmount(() => {
         <div v-if="createStep === 0" class="create-pane">
             <el-form label-position="top">
                 <div class="form-grid">
-                    <el-form-item label="修复过程"><el-input :model-value="processRecord.processName" disabled /></el-form-item>
+                    <el-form-item label="修复过程"><el-input :model-value="processRecord?.processName || '未建立（可保存空白草稿）'" disabled /></el-form-item>
                     <el-form-item label="修复步骤">
                         <el-select v-model="createForm.stepId" filterable placeholder="选择产生影像的步骤" @change="handleCreateStepChange">
                             <el-option v-for="item in steps" :key="item.id" :label="`${item.sequenceNo}. ${item.stepName}`" :value="item.id">

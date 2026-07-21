@@ -22,9 +22,22 @@ const defaultColor = ref('#ef4444')
 
 const selected = computed(() => annotations.value.find(item => item.id === selectedId.value))
 
+const copyAnnotations = value => {
+    if (!Array.isArray(value)) return []
+    return value.map(item => ({
+        ...item,
+        id: item.id || `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        x: Number(item.x) || 0,
+        y: Number(item.y) || 0,
+        width: Number(item.width) || 0,
+        height: Number(item.height) || 0
+    }))
+}
+
 watch(() => [props.modelValue, props.media?.id], () => {
     if (!props.modelValue) return
-    annotations.value = structuredClone(props.media?.annotations || [])
+    // Vue 传入的 media/annotations 是响应式 Proxy，不能直接 structuredClone。
+    annotations.value = copyAnnotations(props.media?.annotations)
     selectedId.value = annotations.value[0]?.id || null
 }, { immediate: true })
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.DiseaseSurveyService;
 import com.itheima.bigevent.service.MonitoringService;
+import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -34,6 +35,39 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
         this.objectMapper = objectMapper;
     }
 
+    @PostConstruct
+    public void ensureDiseaseRecordColumns() {
+        Integer tableCount = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='conservation_disease_record'
+            """, Integer.class);
+        if (tableCount == null || tableCount == 0) return;
+        Integer columnCount = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='conservation_disease_record'
+              AND COLUMN_NAME='disease_type'
+            """, Integer.class);
+        if (columnCount != null && columnCount == 0) {
+            jdbc.execute("""
+                ALTER TABLE conservation_disease_record
+                ADD COLUMN disease_type VARCHAR(100) COMMENT '用户输入的病害类型'
+                AFTER disease_type_id
+                """);
+        }
+        Integer factorColumnCount = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='conservation_disease_record'
+              AND COLUMN_NAME='cause_factors_json'
+            """, Integer.class);
+        if (factorColumnCount != null && factorColumnCount == 0) {
+            jdbc.execute("""
+                ALTER TABLE conservation_disease_record
+                ADD COLUMN cause_factors_json JSON COMMENT '成因因素多选结果'
+                AFTER morphology
+                """);
+        }
+    }
+
     @Override
     public Map<String, Object> getWorkbench(Long projectId) {
         Map<String, Object> project = projectService.getProject(projectId);
@@ -48,19 +82,32 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
             WHERE project_id=? AND deleted=0 ORDER BY id DESC LIMIT 1
             """, projectId);
         List<Map<String, Object>> records = survey == null ? List.of() : jdbc.query("""
-            SELECT id,survey_id AS surveyId,project_id AS projectId,disease_type_id AS diseaseTypeId,
-                   disease_name AS diseaseName,disease_category AS diseaseCategory,severity,
-                   development_status AS developmentStatus,extent_value AS extentValue,
-                   extent_unit AS extentUnit,part_name AS partName,side,
-                   position_description AS positionDescription,morphology,cause_analysis AS causeAnalysis,
-                   structural_impact AS structuralImpact,emergency,recommended_action AS recommendedAction,
-                   sort_order AS sortOrder,
+            SELECT r.id,r.survey_id AS surveyId,r.project_id AS projectId,
+                   r.disease_type_id AS diseaseTypeId,
+                   COALESCE(NULLIF(r.disease_type,''),dt.name,'') AS diseaseType,
+                   r.disease_name AS diseaseName,
+                   CASE COALESCE(NULLIF(r.disease_category,''),dt.category)
+                     WHEN 'physical' THEN '物理病害'
+                     WHEN 'structural' THEN '物理病害'
+                     WHEN 'biological' THEN '生物病害'
+                     WHEN 'chemical' THEN '化学病害'
+                     ELSE COALESCE(NULLIF(r.disease_category,''),dt.category,'')
+                   END AS diseaseCategory,
+                   r.severity,
+                   r.development_status AS developmentStatus,r.extent_value AS extentValue,
+                   r.extent_unit AS extentUnit,r.part_name AS partName,r.side,
+                   r.position_description AS positionDescription,r.morphology,
+                   r.cause_factors_json AS causeFactors,
+                   r.cause_analysis AS causeAnalysis,r.structural_impact AS structuralImpact,
+                   r.emergency,r.recommended_action AS recommendedAction,r.sort_order AS sortOrder,
                    (SELECT COUNT(*) FROM conservation_disease_media m
-                    WHERE m.disease_record_id=conservation_disease_record.id) AS mediaCount
-            FROM conservation_disease_record
-            WHERE survey_id=? AND deleted=0 ORDER BY sort_order,id
+                    WHERE m.disease_record_id=r.id) AS mediaCount
+            FROM conservation_disease_record r
+            LEFT JOIN conservation_disease_type dt ON dt.id=r.disease_type_id
+            WHERE r.survey_id=? AND r.deleted=0 ORDER BY r.sort_order,r.id
             """, this::mapRow, survey.get("id"));
         for (Map<String, Object> record : records) {
+            normalizeCauseFactors(record);
             record.put("media", mediaList(number(record.get("id"))));
         }
         List<Map<String, Object>> types = jdbc.query("""
@@ -129,10 +176,12 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
                 recordParams.addValue("id", recordId);
                 namedJdbc.update("""
                     UPDATE conservation_disease_record SET disease_type_id=:diseaseTypeId,
-                    disease_name=:diseaseName,disease_category=:diseaseCategory,severity=:severity,
+                    disease_type=:diseaseType,disease_name=:diseaseName,
+                    disease_category=:diseaseCategory,severity=:severity,
                     development_status=:developmentStatus,extent_value=:extentValue,extent_unit=:extentUnit,
                     part_name=:partName,side=:side,position_description=:positionDescription,
-                    morphology=:morphology,cause_analysis=:causeAnalysis,structural_impact=:structuralImpact,
+                    morphology=:morphology,cause_factors_json=CAST(:causeFactors AS JSON),
+                    cause_analysis=:causeAnalysis,structural_impact=:structuralImpact,
                     emergency=:emergency,recommended_action=:recommendedAction,sort_order=:sortOrder
                     WHERE id=:id AND survey_id=:surveyId AND project_id=:projectId AND deleted=0
                     """, recordParams);
@@ -141,13 +190,15 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
                 GeneratedKeyHolder key = new GeneratedKeyHolder();
                 namedJdbc.update("""
                     INSERT INTO conservation_disease_record
-                    (survey_id,project_id,disease_type_id,disease_name,disease_category,severity,
+                    (survey_id,project_id,disease_type_id,disease_type,disease_name,disease_category,severity,
                      development_status,extent_value,extent_unit,part_name,side,position_description,
-                     morphology,cause_analysis,structural_impact,emergency,recommended_action,sort_order)
+                     morphology,cause_factors_json,cause_analysis,structural_impact,
+                     emergency,recommended_action,sort_order)
                     VALUES
-                    (:surveyId,:projectId,:diseaseTypeId,:diseaseName,:diseaseCategory,:severity,
+                    (:surveyId,:projectId,:diseaseTypeId,:diseaseType,:diseaseName,:diseaseCategory,:severity,
                      :developmentStatus,:extentValue,:extentUnit,:partName,:side,:positionDescription,
-                     :morphology,:causeAnalysis,:structuralImpact,:emergency,:recommendedAction,:sortOrder)
+                     :morphology,CAST(:causeFactors AS JSON),:causeAnalysis,:structuralImpact,
+                     :emergency,:recommendedAction,:sortOrder)
                     """, recordParams, key, new String[]{"id"});
                 retainedIds.add(key.getKey().longValue());
             }
@@ -285,6 +336,7 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
         return new MapSqlParameterSource()
             .addValue("surveyId", surveyId).addValue("projectId", projectId)
             .addValue("diseaseTypeId", number(record.get("diseaseTypeId")))
+            .addValue("diseaseType", text(record.get("diseaseType")))
             .addValue("diseaseName", text(record.get("diseaseName")))
             .addValue("diseaseCategory", text(record.get("diseaseCategory")))
             .addValue("severity", text(record.get("severity")))
@@ -295,6 +347,7 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
             .addValue("side", text(record.get("side")))
             .addValue("positionDescription", text(record.get("positionDescription")))
             .addValue("morphology", text(record.get("morphology")))
+            .addValue("causeFactors", causeFactorsJson(record.get("causeFactors")))
             .addValue("causeAnalysis", text(record.get("causeAnalysis")))
             .addValue("structuralImpact", text(record.get("structuralImpact")))
             .addValue("emergency", Boolean.TRUE.equals(record.get("emergency")) ? 1 : 0)
@@ -342,6 +395,29 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
             ));
         } catch (Exception exception) {
             media.put("annotations", new ArrayList<>());
+        }
+    }
+
+    private void normalizeCauseFactors(Map<String, Object> record) {
+        Object value = record.get("causeFactors");
+        if (value == null || value.toString().isBlank()) {
+            record.put("causeFactors", new ArrayList<>());
+            return;
+        }
+        try {
+            record.put("causeFactors", objectMapper.readValue(
+                value.toString(), new TypeReference<List<String>>() {}
+            ));
+        } catch (Exception exception) {
+            record.put("causeFactors", new ArrayList<>());
+        }
+    }
+
+    private String causeFactorsJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value instanceof List<?> ? value : List.of());
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("成因因素数据格式不正确", exception);
         }
     }
 

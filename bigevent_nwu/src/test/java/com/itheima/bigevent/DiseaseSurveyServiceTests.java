@@ -43,13 +43,16 @@ class DiseaseSurveyServiceTests {
         survey.put("surveyor", "测试人员");
         survey.put("surveyLocation", "保护实验室");
         Map<String, Object> disease = map(
+            "diseaseType", "裂隙类",
             "diseaseName", "测试裂隙",
-            "diseaseCategory", "structural",
+            "diseaseCategory", "物理病害",
             "severity", "critical",
             "developmentStatus", "rapidly_developing",
             "extentValue", 12.5,
             "extentUnit", "cm",
             "partName", "器身",
+            "causeFactors", List.of("自然环境", "机械外力"),
+            "causeAnalysis", "环境变化与外力共同作用",
             "structuralImpact", "overall",
             "emergency", true,
             "recommendedAction", "立即临时加固"
@@ -62,6 +65,9 @@ class DiseaseSurveyServiceTests {
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> savedRecords = (List<Map<String, Object>>) saved.get("records");
+        assertEquals("裂隙类", savedRecords.getFirst().get("diseaseType"));
+        assertEquals("物理病害", savedRecords.getFirst().get("diseaseCategory"));
+        assertEquals(List.of("自然环境", "机械外力"), savedRecords.getFirst().get("causeFactors"));
         Long recordId = ((Number) savedRecords.getFirst().get("id")).longValue();
         MockMultipartFile image = new MockMultipartFile(
             "file", "裂隙.png", "image/png", "test-image".getBytes(StandardCharsets.UTF_8)

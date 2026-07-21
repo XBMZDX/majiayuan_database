@@ -9,7 +9,7 @@ const props = defineProps({
     saving: Boolean,
     dirty: Boolean
 })
-defineEmits(['create', 'generate', 'save', 'complete', 'batch-archive', 'process', 'archive', 'open-list'])
+defineEmits(['create', 'generate', 'save', 'complete', 'batch-archive', 'process', 'archive', 'restoration', 'open-list'])
 
 const stats = computed(() => ({
     draft: props.groups.filter(item => item.evaluationStatus === 'draft').length,
@@ -40,8 +40,9 @@ const stats = computed(() => ({
             <el-button type="primary" :icon="Plus" @click="$emit('create')">新建对比组</el-button>
             <el-button :icon="Promotion" @click="$emit('generate')">从过程影像生成</el-button>
             <el-button v-if="current" :loading="saving" :type="dirty ? 'warning' : 'default'" :icon="Check" @click="$emit('save')">
-                {{ dirty ? '保存当前对比*' : '保存当前对比' }}
+                {{ dirty ? '保存草稿*' : '保存草稿' }}
             </el-button>
+            <el-button type="primary" plain @click="$emit('restoration')">保存并进入复原成果</el-button>
             <el-button v-if="current?.evaluationStatus === 'draft'" type="success" :icon="Collection" @click="$emit('complete')">完成评价</el-button>
             <el-dropdown>
                 <el-button :icon="FolderAdd">联动操作</el-button>
@@ -96,4 +97,3 @@ p { margin: 0; color: #84908c; font-size: 12px; }
     .actions :deep(.el-button) { margin-left: 0; }
 }
 </style>
-

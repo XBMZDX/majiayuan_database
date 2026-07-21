@@ -235,6 +235,12 @@ const saveDraft = async (showMessage = true) => {
     }
 }
 
+const saveAndContinue = async () => {
+    if (!(await saveDraft(false))) return
+    dirty.value = false
+    router.push(`/conservation/project/${projectId.value}/process`)
+}
+
 const finalizeCurrentArchive = async () => {
     const critical = missingItems.value.filter(item => item.critical)
     if (completeness.value < 80 || critical.length) {
@@ -437,6 +443,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                 :saving="saving"
                 :dirty="dirty"
                 @save="saveDraft"
+                @next="saveAndContinue"
                 @finalize="finalizeCurrentArchive"
                 @revision="openRevisionDialog"
                 @export="handleExportArchive"

@@ -10,7 +10,7 @@ import {
 
 const props = defineProps({
     step: { type: Object, required: true },
-    formalPlan: { type: Object, required: true },
+    formalPlan: { type: Object, default: () => ({}) },
     readOnly: Boolean
 })
 

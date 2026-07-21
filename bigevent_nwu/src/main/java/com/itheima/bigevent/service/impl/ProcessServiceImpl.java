@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.ArchiveService;
 import com.itheima.bigevent.service.ProcessService;
+import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -30,6 +31,18 @@ public class ProcessServiceImpl implements ProcessService {
         this.namedJdbc = new NamedParameterJdbcTemplate(jdbc);
         this.objectMapper = objectMapper;
         this.archiveService = archiveService;
+    }
+
+    @PostConstruct
+    public void allowProcessWithoutArchive() {
+        Integer count = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='conservation_process'
+              AND COLUMN_NAME='archive_id' AND IS_NULLABLE='NO'
+            """, Integer.class);
+        if (count != null && count > 0) {
+            jdbc.execute("ALTER TABLE conservation_process MODIFY archive_id BIGINT NULL");
+        }
     }
 
     @Override
@@ -69,6 +82,7 @@ public class ProcessServiceImpl implements ProcessService {
                 if (!media.isEmpty()) step.put("media", media);
                 return step;
             }, processId);
+        refreshDiseaseReferences(steps, archiveWorkspace == null ? List.of() : list(archiveWorkspace.get("diseaseRecords")));
         result.put("processRecord", process);
         result.put("steps", steps);
         return result;
@@ -82,25 +96,25 @@ public class ProcessServiceImpl implements ProcessService {
         Map<String, Object> context = archiveService.getWorkbench(projectId);
         Map<String, Object> archive = map(context.get("archive"));
         Map<String, Object> workspace = map(context.get("workspace"));
-        if (archive == null || workspace == null) throw new IllegalStateException("请先建立保护修复档案");
-        Map<String, Object> plan = map(workspace.get("plan"));
-        if (plan == null || !"completed".equals(text(plan.get("planStatus")))) {
-            throw new IllegalStateException("保护修复方案尚未标记为已完成");
-        }
+        Map<String, Object> plan = workspace == null ? null : map(workspace.get("plan"));
         Map<String, Object> project = map(context.get("project"));
+        if (project == null) throw new IllegalArgumentException("保护修复项目不存在");
         String code = text(project.get("artifactCode")).replaceAll("[^A-Za-z0-9]", "");
         if (code.isBlank()) code = "PROJECT" + projectId;
+        String executionMode = plan == null ? "manual"
+            : "completed".equals(text(plan.get("planStatus"))) ? "formal" : "draft_plan";
         var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
         namedJdbc.update("""
             INSERT INTO conservation_process
             (project_id,archive_id,process_code,process_name,process_status,execution_mode,supervisor,
              expected_end_date,total_steps,completed_steps,progress)
-            VALUES (:projectId,:archiveId,:processCode,:processName,'not_started','formal',:supervisor,
+            VALUES (:projectId,:archiveId,:processCode,:processName,'not_started',:executionMode,:supervisor,
                     :expectedEndDate,0,0,0)
             """, new MapSqlParameterSource()
-            .addValue("projectId", projectId).addValue("archiveId", archive.get("id"))
+            .addValue("projectId", projectId).addValue("archiveId", archive == null ? null : archive.get("id"))
             .addValue("processCode", "CP-" + code + "-" + String.format("%03d", projectId))
             .addValue("processName", text(project.get("artifactName")) + "保护修复执行过程")
+            .addValue("executionMode", executionMode)
             .addValue("supervisor", project.get("principal"))
             .addValue("expectedEndDate", date(project.get("expectedEndDate"))), key, new String[]{"id"});
         regenerateStepsInternal(key.getKey().longValue(), projectId, workspace);
@@ -219,12 +233,15 @@ public class ProcessServiceImpl implements ProcessService {
     }
 
     private void regenerateStepsInternal(Long processId, Long projectId, Map<String, Object> workspace) {
-        if (workspace == null) throw new IllegalStateException("档案方案内容不存在");
+        jdbc.update("DELETE FROM conservation_process_media WHERE process_id=?", processId);
+        jdbc.update("DELETE FROM conservation_process_step WHERE process_id=?", processId);
+        if (workspace == null) {
+            jdbc.update("UPDATE conservation_process SET total_steps=0,completed_steps=0,progress=0 WHERE id=?", processId);
+            return;
+        }
         List<Map<String, Object>> measures = list(workspace.get("planDiseaseList"));
         List<Map<String, Object>> diseases = list(workspace.get("diseaseRecords"));
         List<Map<String, Object>> planMaterials = list(workspace.get("planMaterials"));
-        jdbc.update("DELETE FROM conservation_process_media WHERE process_id=?", processId);
-        jdbc.update("DELETE FROM conservation_process_step WHERE process_id=?", processId);
         long baseId = System.currentTimeMillis();
         int sequence = 1;
         for (Map<String, Object> measure : measures) {
@@ -255,7 +272,7 @@ public class ProcessServiceImpl implements ProcessService {
             "stepType", "other", "stepStatus", "pending", "sequenceNo", sequence, "progressWeight", 10,
             "plannedStartTime", "", "plannedEndTime", "", "actualStartTime", "", "actualEndTime", "",
             "operatorName", "", "assistantNames", "", "operationLocation", "文物保护实验室",
-            "targetPart", text(measure.get("diseaseName")), "plannedMethod", method, "actualMethod", "",
+            "targetPart", diseaseParts(related, text(measure.get("diseaseName"))), "plannedMethod", method, "actualMethod", "",
             "operationDescription", "", "resultDescription", "", "deviationFlag", false,
             "deviationLevel", "minor", "deviationReason", "", "adjustmentDescription", "",
             "requiresMedia", true, "requiresQualityCheck", true, "requiresMonitoring", false,
@@ -273,6 +290,60 @@ public class ProcessServiceImpl implements ProcessService {
                 "monitoringAdvice", "", "finalConclusion", "")
         );
         return step;
+    }
+
+    /**
+     * 修复步骤只保存病害记录 ID；名称、部位和风险属性以病害调查的当前数据为准。
+     * 这样病害调查被修改后，过程记录重新加载即可获得同步后的引用信息。
+     */
+    private void refreshDiseaseReferences(List<Map<String, Object>> steps, List<Map<String, Object>> diseaseRecords) {
+        if (steps.isEmpty() || diseaseRecords.isEmpty()) return;
+        Map<Long, Map<String, Object>> diseasesById = new HashMap<>();
+        for (Map<String, Object> record : diseaseRecords) {
+            Long id = longValue(record.get("id"));
+            if (id != null) diseasesById.put(id, record);
+        }
+        for (Map<String, Object> step : steps) {
+            List<Map<String, Object>> related = list(step.get("relatedDiseases"));
+            if (related.isEmpty()) continue;
+            List<String> oldNames = related.stream().map(item -> text(item.get("diseaseName")))
+                .filter(name -> !name.isBlank()).toList();
+            String oldDiseaseParts = diseaseParts(related, "");
+            boolean generatedTargetPart = !bool(step.get("temporaryStep"))
+                && (text(step.get("targetPart")).isBlank()
+                    || text(step.get("targetPart")).equals(String.join("、", oldNames))
+                    || text(step.get("targetPart")).equals(oldDiseaseParts));
+            boolean changed = false;
+            for (Map<String, Object> relation : related) {
+                Map<String, Object> current = diseasesById.get(longValue(relation.get("diseaseRecordId")));
+                if (current == null) continue;
+                for (String key : List.of("diseaseName", "severity", "developmentStatus", "partName")) {
+                    Object value = current.get(key);
+                    if (!Objects.equals(relation.get(key), value)) {
+                        relation.put(key, value);
+                        changed = true;
+                    }
+                }
+            }
+            if (generatedTargetPart) {
+                String currentTargetPart = diseaseParts(related, "");
+                if (!currentTargetPart.isBlank() && !currentTargetPart.equals(text(step.get("targetPart")))) {
+                    step.put("targetPart", currentTargetPart);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                namedJdbc.update("UPDATE conservation_process_step SET target_part=:targetPart,step_json=:stepJson WHERE id=:id",
+                    new MapSqlParameterSource().addValue("id", step.get("id"))
+                        .addValue("targetPart", step.get("targetPart")).addValue("stepJson", json(step)));
+            }
+        }
+    }
+
+    private String diseaseParts(List<Map<String, Object>> diseases, String fallback) {
+        List<String> parts = diseases.stream().map(item -> text(item.get("partName")))
+            .filter(part -> !part.isBlank()).distinct().toList();
+        return parts.isEmpty() ? fallback : String.join("、", parts);
     }
 
     private void insertStep(Long processId, Long projectId, Map<String, Object> step) {

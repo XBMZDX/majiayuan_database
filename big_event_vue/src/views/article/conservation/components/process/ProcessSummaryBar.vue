@@ -13,7 +13,7 @@ const props = defineProps({
     dirty: Boolean
 })
 
-defineEmits(['save', 'start-step', 'complete-step', 'pause', 'resume', 'archive', 'plan', 'rework', 'open-nav'])
+defineEmits(['save', 'next', 'start-step', 'complete-step', 'pause', 'resume', 'archive', 'plan', 'rework', 'open-nav'])
 
 const processStatus = computed(() => {
     const map = {
@@ -59,7 +59,8 @@ const stageText = computed(() => {
         </div>
 
         <div class="summary-actions">
-            <el-button :icon="FolderOpened" :loading="saving" @click="$emit('save')">保存当前步骤</el-button>
+            <el-button :icon="FolderOpened" :loading="saving" @click="$emit('save')">保存草稿</el-button>
+            <el-button :loading="saving" @click="$emit('next')">保存并进入前后对比</el-button>
             <el-button v-if="currentStep?.stepStatus === 'pending' && process.processStatus !== 'paused'" type="primary" :icon="VideoPlay" @click="$emit('start-step')">开始步骤</el-button>
             <el-button v-if="currentStep?.stepStatus === 'in_progress'" type="success" :icon="CircleCheck" @click="$emit('complete-step')">完成步骤</el-button>
             <el-button v-if="process.processStatus === 'in_progress'" type="warning" :icon="VideoPause" @click="$emit('pause')">暂停过程</el-button>
