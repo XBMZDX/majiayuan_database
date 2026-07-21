@@ -68,6 +68,11 @@ const menuTitleMap = {
     '/conservation/result': '文物复原成果',
     '/conservation/monitor': '后续监测',
     '/archive/manage': '文物数字档案中心',
+    '/archive/catalog': '档案目录',
+    '/archive/files': '文件资源库',
+    '/archive/media': '图像与多媒体',
+    '/archive/models': '三维模型库',
+    '/archive/research': '档案编研与导出',
     '/library/manage': '知识中心',
     '/ai/manage': 'AI智能助手',
     '/user/info': '基本资料',
@@ -181,10 +186,18 @@ const handleCommand = (command) => {
                     <el-menu-item index="/conservation/result">文物复原成果</el-menu-item>
                     <el-menu-item index="/conservation/monitor">后续监测</el-menu-item>
                 </el-sub-menu>
-                <el-menu-item index="/archive/manage">
-                    <el-icon><Reading /></el-icon>
-                    <span>文物数字档案中心</span>
-                </el-menu-item>
+                <el-sub-menu index="/archive/group">
+                    <template #title>
+                        <el-icon><Reading /></el-icon>
+                        <span>文物数字档案中心</span>
+                    </template>
+                    <el-menu-item index="/archive/manage">档案资源总览</el-menu-item>
+                    <el-menu-item index="/archive/catalog">档案目录</el-menu-item>
+                    <el-menu-item index="/archive/files">文件资源库</el-menu-item>
+                    <el-menu-item index="/archive/media">图像与多媒体</el-menu-item>
+                    <el-menu-item index="/archive/models">三维模型库</el-menu-item>
+                    <el-menu-item index="/archive/research">档案编研与导出</el-menu-item>
+                </el-sub-menu>
                 <el-menu-item index="/library/manage">
                     <el-icon><Reading /></el-icon>
                     <span>知识中心</span>
