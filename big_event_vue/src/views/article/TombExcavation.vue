@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { artifactsBatchImportService } from '@/api/Artifacts.js'
+import { decorateArtifactsWithDetections } from '@/utils/artifactDetectionStatus.js'
 import * as XLSX from 'xlsx'
 
 // 墓葬列表 + 选中
@@ -44,9 +45,13 @@ const calcStats = (list) => {
 // 切换墓葬 → 刷新统计 + 文物表
 const loadBurialData = async () => {
     if (!selectedBurialId.value) return
-    const artRes = await request.get(`/admin/burial/${selectedBurialId.value}/artifacts`)
+    const [artRes, detectionRes] = await Promise.all([
+        request.get(`/admin/burial/${selectedBurialId.value}/artifacts`),
+        request.get('/admin/detection').catch(() => ({ data: [] }))
+    ])
     // 墓葬出土只显示非棺文物（coffin_index 为空或0）
-    artifacts.value = (artRes.data || []).filter(a => !a.coffinIndex || a.coffinIndex === 0)
+    const sourceArtifacts = (artRes.data || []).filter(a => !a.coffinIndex || a.coffinIndex === 0)
+    artifacts.value = decorateArtifactsWithDetections(sourceArtifacts, detectionRes.data || [])
     stats.value = calcStats(artifacts.value)
     pageNum.value = 1
 }
@@ -64,6 +69,7 @@ const onPageChange = (num) => { pageNum.value = num }
 const detailVisible = ref(false)
 const detailData = ref({})
 const openDetail = (row) => { detailData.value = { ...row }; detailVisible.value = true }
+const getTestingStatusText = row => row?.testingStatusDisplay || row?.testingStatus || '无'
 
 // ========== 批量删除（与文物信息总览相同模式） ==========
 const batchMode = ref(false)
@@ -214,7 +220,9 @@ onMounted(() => { fetchBurialList() })
                 <el-table-column label="材质" prop="material1" />
                 <el-table-column label="完整度" prop="completeness" />
                 <el-table-column label="数量" prop="quantity1" />
-                <el-table-column label="科技检测情况" prop="testingStatus" />
+                <el-table-column label="科技检测情况" width="220">
+                    <template #default="{ row }">{{ getTestingStatusText(row) }}</template>
+                </el-table-column>
                 <el-table-column label="操作" fixed="right">
                     <template #default="{ row }"><el-link type="primary" @click="openDetail(row)">详情</el-link></template>
                 </el-table-column>
@@ -252,7 +260,7 @@ onMounted(() => { fetchBurialList() })
             <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '-' }}</el-descriptions-item>
             <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '-' }}</el-descriptions-item>
             <el-descriptions-item label="定级情况">{{ detailData.gradingStatus || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="科技检测情况">{{ detailData.testingStatus || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="科技检测情况">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
             <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '-' }}</el-descriptions-item>
             <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '-' }}</el-descriptions-item>
             <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '-' }}</el-descriptions-item>
