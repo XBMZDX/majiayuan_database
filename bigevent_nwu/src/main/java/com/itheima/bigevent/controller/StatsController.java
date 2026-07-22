@@ -57,15 +57,15 @@ public class StatsController {
                             (
                                 a.new_artifact_code IS NOT NULL
                                 AND TRIM(a.new_artifact_code) != ''
-                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
-                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.new_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '') COLLATE utf8mb4_unicode_ci
+                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.new_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '') COLLATE utf8mb4_unicode_ci
                             )
                             OR
                             (
                                 a.original_artifact_code IS NOT NULL
                                 AND TRIM(a.original_artifact_code) != ''
-                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
-                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.original_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '') COLLATE utf8mb4_unicode_ci
+                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.original_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '') COLLATE utf8mb4_unicode_ci
                             )
                         )
                     )
@@ -74,8 +74,8 @@ public class StatsController {
                         AND da.artifact_name IS NOT NULL
                         AND TRIM(da.artifact_name) != ''
                         AND (
-                            TRIM(da.artifact_name) = TRIM(COALESCE(a.new_artifact_name, ''))
-                            OR TRIM(da.artifact_name) = TRIM(COALESCE(a.original_artifact_name, ''))
+                            TRIM(da.artifact_name) COLLATE utf8mb4_unicode_ci = TRIM(COALESCE(a.new_artifact_name, '')) COLLATE utf8mb4_unicode_ci
+                            OR TRIM(da.artifact_name) COLLATE utf8mb4_unicode_ci = TRIM(COALESCE(a.original_artifact_name, '')) COLLATE utf8mb4_unicode_ci
                         )
                     )
                 )

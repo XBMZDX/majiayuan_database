@@ -6,6 +6,7 @@ import com.itheima.bigevent.pojo.ExperimentResult;
 import com.itheima.bigevent.pojo.Result;
 import com.itheima.bigevent.mapper.AnalysisResultMapper;
 import com.itheima.bigevent.mapper.ExperimentResultMapper;
+import com.itheima.bigevent.service.DetectionArtifactOverviewService;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -24,9 +25,16 @@ public class DetectionController {
     private AnalysisResultMapper resultMapper;
     @Autowired
     private ExperimentResultMapper expResultMapper;
+    @Autowired
+    private DetectionArtifactOverviewService overviewService;
 
     @GetMapping
     public Result<List<DetectionAnalysis>> list() { return Result.success(mapper.list()); }
+
+    @GetMapping("/artifact-overview")
+    public Result<Map<String, Object>> artifactOverview() {
+        return Result.success(overviewService.getOverview());
+    }
 
     @PostMapping
     public Result add(@RequestBody DetectionAnalysis d) {

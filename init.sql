@@ -450,6 +450,7 @@ CREATE TABLE IF NOT EXISTS experiment_results (
 
 -- 检测实验名称会跨表关联。统一这些表的排序规则，避免 FIND_IN_SET 或等值比较出现排序规则冲突。
 ALTER TABLE detection_analysis CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE artifacts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE lab_instruments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE analysis_results CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE experiment_results CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
