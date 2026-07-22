@@ -5,6 +5,7 @@ import com.github.pagehelper.PageInfo;
 import com.itheima.bigevent.mapper.ArtifactsMapper;
 import com.itheima.bigevent.pojo.PageBean;
 import com.itheima.bigevent.pojo.artifacts;
+import com.itheima.bigevent.service.ArtifactDetectionStatusService;
 import com.itheima.bigevent.service.ArtifactsService;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,8 @@ public class ArtifactsServiceImpl implements ArtifactsService {
 
     @Autowired
     private ArtifactsMapper artifactsMapper;
+    @Autowired
+    private ArtifactDetectionStatusService artifactDetectionStatusService;
 
     /**
      * 新增文物 — 自动分配序号（填补空缺或末尾追加），事务保证原子性
@@ -104,6 +107,7 @@ public class ArtifactsServiceImpl implements ArtifactsService {
 
         // 使用PageInfo获取分页信息
         PageInfo<artifacts> pageInfo = new PageInfo<>(artifactsList);
+        artifactDetectionStatusService.decorate(pageInfo.getList());
 
         // 填充PageBean对象
         pageBean.setTotal(pageInfo.getTotal());

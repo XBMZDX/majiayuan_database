@@ -3,7 +3,6 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { artifactsBatchImportService } from '@/api/Artifacts.js'
-import { decorateArtifactsWithDetections } from '@/utils/artifactDetectionStatus.js'
 import * as XLSX from 'xlsx'
 
 // 墓葬列表（只显示有车的）
@@ -39,12 +38,8 @@ const onChariotChange = () => { loadArtifacts() }
 
 const loadArtifacts = async () => {
     if (!selectedBurialId.value) { artifacts.value = []; stats.value = { total: 0, materials: [], completeness: [] }; return }
-    const [artRes, detectionRes] = await Promise.all([
-        request.get(`/admin/burial/${selectedBurialId.value}/artifacts`),
-        request.get('/admin/detection').catch(() => ({ data: [] }))
-    ])
-    const sourceArtifacts = (artRes.data || []).filter(a => a.chariotIndex === selectedChariotIndex.value)
-    artifacts.value = decorateArtifactsWithDetections(sourceArtifacts, detectionRes.data || [])
+    const artRes = await request.get(`/admin/burial/${selectedBurialId.value}/artifacts`)
+    artifacts.value = (artRes.data || []).filter(a => a.chariotIndex === selectedChariotIndex.value)
     stats.value = calcStats(artifacts.value); pageNum.value = 1
 }
 

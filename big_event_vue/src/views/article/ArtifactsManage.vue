@@ -8,7 +8,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTokenStore } from '@/stores/token.js'
 import request from '@/utils/request.js'
 import StatisticsCards from '@/components/StatisticsCards.vue'
-import { decorateArtifactsWithDetections } from '@/utils/artifactDetectionStatus.js'
 import {
     artifactsListService,
     artifactsAddService,
@@ -128,12 +127,8 @@ const artifactsList = async () => {
         excavationRelic: searchParams.value.excavationRelic,
         completeness: searchParams.value.completeness,
     }
-    const [result, detectionResult] = await Promise.all([
-        artifactsListService(params),
-        request.get('/admin/detection').catch(() => ({ data: [] }))
-    ])
-    const detections = detectionResult.data || []
-    artifacts.value = decorateArtifactsWithDetections(result.data.items || [], detections)
+    const result = await artifactsListService(params)
+    artifacts.value = result.data.items || []
     total.value = result.data.total;
 }
 artifactsList();

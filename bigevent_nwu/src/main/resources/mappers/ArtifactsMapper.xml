@@ -46,7 +46,7 @@
     </update>
 
     <!-- 动态查询文物列表 -->
-    <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
+    <select id="listLegacy" resultType="com.itheima.bigevent.pojo.artifacts">
         SELECT a.*,
                COALESCE((
                    SELECT GROUP_CONCAT(
@@ -93,6 +93,28 @@
             </if>
             <if test="completeness != null and completeness != ''">
                 AND completeness LIKE CONCAT('%', #{completeness}, '%')
+            </if>
+        </where>
+        ORDER BY CAST(a.serial_number AS UNSIGNED) ASC
+    </select>
+    <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
+        SELECT a.*
+        FROM artifacts a
+        <where>
+            <if test="newArtifactName != null and newArtifactName != ''">
+                AND a.new_artifact_name LIKE CONCAT('%', #{newArtifactName}, '%')
+            </if>
+            <if test="newArtifactCode != null and newArtifactCode != ''">
+                AND a.new_artifact_code LIKE CONCAT('%', #{newArtifactCode}, '%')
+            </if>
+            <if test="material1 != null and material1 != ''">
+                AND a.material1 LIKE CONCAT('%', #{material1}, '%')
+            </if>
+            <if test="excavationRelic != null and excavationRelic != ''">
+                AND a.excavation_relic LIKE CONCAT('%', #{excavationRelic}, '%')
+            </if>
+            <if test="completeness != null and completeness != ''">
+                AND a.completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
         ORDER BY CAST(a.serial_number AS UNSIGNED) ASC

@@ -3,7 +3,6 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { artifactsBatchImportService } from '@/api/Artifacts.js'
-import { decorateArtifactsWithDetections } from '@/utils/artifactDetectionStatus.js'
 import * as XLSX from 'xlsx'
 
 // 墓葬列表 + 选中
@@ -45,13 +44,9 @@ const calcStats = (list) => {
 // 切换墓葬 → 刷新统计 + 文物表
 const loadBurialData = async () => {
     if (!selectedBurialId.value) return
-    const [artRes, detectionRes] = await Promise.all([
-        request.get(`/admin/burial/${selectedBurialId.value}/artifacts`),
-        request.get('/admin/detection').catch(() => ({ data: [] }))
-    ])
+    const artRes = await request.get(`/admin/burial/${selectedBurialId.value}/artifacts`)
     // 墓葬出土只显示非棺文物（coffin_index 为空或0）
-    const sourceArtifacts = (artRes.data || []).filter(a => !a.coffinIndex || a.coffinIndex === 0)
-    artifacts.value = decorateArtifactsWithDetections(sourceArtifacts, detectionRes.data || [])
+    artifacts.value = (artRes.data || []).filter(a => !a.coffinIndex || a.coffinIndex === 0)
     stats.value = calcStats(artifacts.value)
     pageNum.value = 1
 }

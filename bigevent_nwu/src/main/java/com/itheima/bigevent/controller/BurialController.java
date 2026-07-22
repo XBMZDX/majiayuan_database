@@ -5,6 +5,7 @@ import com.itheima.bigevent.pojo.Result;
 import com.itheima.bigevent.pojo.artifacts;
 import com.itheima.bigevent.mapper.BurialMapper;
 import com.itheima.bigevent.mapper.ArtifactsMapper;
+import com.itheima.bigevent.service.ArtifactDetectionStatusService;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -23,11 +24,13 @@ public class BurialController {
 
     @Autowired
     private ArtifactsMapper artifactsMapper;
+    @Autowired
+    private ArtifactDetectionStatusService artifactDetectionStatusService;
 
     // 墓葬出土文物列表
     @GetMapping("/{id}/artifacts")
     public Result<List<artifacts>> burialArtifacts(@PathVariable Integer id) {
-        return Result.success(artifactsMapper.listByBurial(id));
+        return Result.success(artifactDetectionStatusService.decorate(artifactsMapper.listByBurial(id)));
     }
 
     // 墓葬文物统计（总数 + 材质分布 + 完整度分布）
