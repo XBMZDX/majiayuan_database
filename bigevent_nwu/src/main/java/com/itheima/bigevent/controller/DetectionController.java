@@ -30,6 +30,7 @@ public class DetectionController {
 
     @PostMapping
     public Result add(@RequestBody DetectionAnalysis d) {
+        normalizeArtifactCode(d);
         d.setCreateTime(LocalDateTime.now()); d.setUpdateTime(LocalDateTime.now());
         mapper.insert(d);
         // 拆分目的，每个实验名创建一条分析结果 + 一条实验结果
@@ -65,6 +66,7 @@ public class DetectionController {
 
     @PutMapping("/{id}")
     public Result update(@PathVariable Integer id, @RequestBody DetectionAnalysis d) {
+        normalizeArtifactCode(d);
         d.setId(id); d.setUpdateTime(LocalDateTime.now()); mapper.update(d);
         // 1) 保存 analysis_results 用户数据
         Map<String, AnalysisResult> savedAr = new HashMap<>();
@@ -168,5 +170,11 @@ public class DetectionController {
 
         @Delete("<script>DELETE FROM detection_analysis WHERE id IN <foreach collection='list' item='id' open='(' separator=',' close=')'>#{id}</foreach></script>")
         void batchDelete(List<Integer> ids);
+    }
+
+    private void normalizeArtifactCode(DetectionAnalysis d) {
+        if (d != null && d.getArtifactCode() != null) {
+            d.setArtifactCode(d.getArtifactCode().trim().replace('：', ':'));
+        }
     }
 }

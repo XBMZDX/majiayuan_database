@@ -41,6 +41,7 @@ public class artifacts {
     private String notes;               // 备注
     private String gradingStatus;       // 定级情况
     private String testingStatus;       // 科技检测情况
+    private String testingStatusDisplay; // 联动检测分析名称
     private Integer createdBy;          // 创建人id
     private LocalDateTime createTime;   // 创建时间
     private LocalDateTime updateTime;   // 更新时间

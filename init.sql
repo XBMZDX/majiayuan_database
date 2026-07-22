@@ -1179,3 +1179,237 @@ CREATE TABLE IF NOT EXISTS monitoring_alert (
     INDEX idx_monitoring_alert_status (alert_status),
     INDEX idx_monitoring_alert_created_project (created_project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='监测风险预警';
+
+-- ============================================
+-- 12. 数字档案中心
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS digital_resource (
+    id                 BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_code      VARCHAR(60)  NOT NULL,
+    resource_name      VARCHAR(255) NOT NULL,
+    title              VARCHAR(255),
+    original_file_name VARCHAR(255),
+    resource_type      VARCHAR(30)  NOT NULL,
+    source_module      VARCHAR(50),
+    file_extension     VARCHAR(30),
+    file_size          BIGINT DEFAULT 0,
+    file_url           VARCHAR(1000),
+    thumbnail_url      VARCHAR(1000),
+    preview_url        VARCHAR(1000),
+    resource_status    VARCHAR(30) DEFAULT 'normal',
+    data_status        VARCHAR(30) DEFAULT 'incomplete',
+    current_version    VARCHAR(30) DEFAULT 'V1.0',
+    version_count      INT DEFAULT 1,
+    uploaded_by        VARCHAR(100),
+    upload_time        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time        DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    description        TEXT,
+    keywords           TEXT,
+    deleted            TINYINT DEFAULT 0,
+    deleted_by         VARCHAR(100),
+    delete_time        DATETIME,
+    UNIQUE KEY uk_digital_resource_code (resource_code),
+    INDEX idx_digital_resource_type (resource_type),
+    INDEX idx_digital_resource_source (source_module),
+    INDEX idx_digital_resource_status (resource_status),
+    INDEX idx_digital_resource_deleted (deleted),
+    INDEX idx_digital_resource_upload_time (upload_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源主表';
+
+CREATE TABLE IF NOT EXISTS digital_resource_version (
+    id                 BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_id        BIGINT NOT NULL,
+    version_no         VARCHAR(30) NOT NULL,
+    version_name       VARCHAR(255),
+    version_type       VARCHAR(30),
+    original_file_name VARCHAR(255),
+    file_extension     VARCHAR(30),
+    file_size          BIGINT DEFAULT 0,
+    file_url           VARCHAR(1000),
+    content_type       VARCHAR(100),
+    version_status     VARCHAR(30) DEFAULT 'current',
+    create_time        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_digital_resource_version_resource (resource_id),
+    INDEX idx_digital_resource_version_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源版本记录';
+
+CREATE TABLE IF NOT EXISTS digital_resource_relation (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_id     BIGINT NOT NULL,
+    relation_type   VARCHAR(50) NOT NULL,
+    relation_id     BIGINT,
+    relation_code   VARCHAR(60),
+    relation_name   VARCHAR(255),
+    is_primary      TINYINT DEFAULT 0,
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_digital_resource_relation_resource (resource_id),
+    INDEX idx_digital_resource_relation_type (relation_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源关联关系';
+
+CREATE TABLE IF NOT EXISTS digital_resource_tag (
+    id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+    tag_name    VARCHAR(100) NOT NULL,
+    tag_type    VARCHAR(50),
+    deleted     TINYINT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_digital_resource_tag_type (tag_type),
+    INDEX idx_digital_resource_tag_deleted (deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源标签';
+
+CREATE TABLE IF NOT EXISTS digital_resource_tag_relation (
+    id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_id BIGINT NOT NULL,
+    tag_id      BIGINT NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_resource_tag_relation (resource_id, tag_id),
+    INDEX idx_digital_resource_tag_relation_resource (resource_id),
+    INDEX idx_digital_resource_tag_relation_tag (tag_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源标签关联';
+
+CREATE TABLE IF NOT EXISTS digital_resource_operation_log (
+    id                     BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_id            BIGINT NOT NULL,
+    operation_type         VARCHAR(50) NOT NULL,
+    operation_description  TEXT,
+    operation_time         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_digital_resource_operation_log_resource (resource_id),
+    INDEX idx_digital_resource_operation_log_time (operation_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字资源操作日志';
+
+CREATE TABLE IF NOT EXISTS digital_media_metadata (
+    resource_id          BIGINT PRIMARY KEY,
+    media_type           VARCHAR(30),
+    media_title          VARCHAR(255),
+    media_stage          VARCHAR(30),
+    media_subtype        VARCHAR(30),
+    primary_object_type  VARCHAR(50),
+    primary_object_id    BIGINT,
+    primary_object_code  VARCHAR(60),
+    primary_object_name  VARCHAR(255),
+    shooting_part        VARCHAR(100),
+    shooting_angle       VARCHAR(100),
+    shooting_date        DATE,
+    photographer         VARCHAR(100),
+    has_scale            TINYINT DEFAULT 0,
+    scale_unit           VARCHAR(20),
+    quality_level        VARCHAR(30),
+    is_key_media         TINYINT DEFAULT 0,
+    media_description    TEXT,
+    metadata_status      VARCHAR(30) DEFAULT 'incomplete',
+    sort_time            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    create_time          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_digital_media_metadata_object (primary_object_type, primary_object_id),
+    INDEX idx_digital_media_metadata_stage (media_stage),
+    INDEX idx_digital_media_metadata_status (metadata_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字媒体元数据';
+
+CREATE TABLE IF NOT EXISTS digital_media_collection (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    collection_code VARCHAR(60) NOT NULL,
+    collection_name VARCHAR(255) NOT NULL,
+    collection_type VARCHAR(30) DEFAULT 'custom',
+    object_type     VARCHAR(50),
+    object_id       BIGINT,
+    item_count      INT DEFAULT 0,
+    deleted         TINYINT DEFAULT 0,
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_media_collection_code (collection_code),
+    INDEX idx_digital_media_collection_object (object_type, object_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字媒体集合';
+
+CREATE TABLE IF NOT EXISTS digital_media_collection_item (
+    id            BIGINT PRIMARY KEY AUTO_INCREMENT,
+    collection_id BIGINT NOT NULL,
+    resource_id   BIGINT NOT NULL,
+    create_time   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_media_collection_item (collection_id, resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字媒体集合条目';
+
+CREATE TABLE IF NOT EXISTS digital_media_comparison (
+    id                    BIGINT PRIMARY KEY AUTO_INCREMENT,
+    comparison_code       VARCHAR(60) NOT NULL,
+    comparison_name       VARCHAR(255),
+    object_type           VARCHAR(50),
+    object_id             BIGINT,
+    before_resource_id    BIGINT,
+    after_resource_id     BIGINT,
+    comparison_description TEXT,
+    overall_effect        VARCHAR(100),
+    deleted               TINYINT DEFAULT 0,
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_media_comparison_code (comparison_code),
+    INDEX idx_digital_media_comparison_object (object_type, object_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='修复前后对比';
+
+CREATE TABLE IF NOT EXISTS digital_media_marker (
+    id            BIGINT PRIMARY KEY AUTO_INCREMENT,
+    resource_id   BIGINT NOT NULL,
+    marker_type   VARCHAR(50),
+    marker_name   VARCHAR(255),
+    position_x    DECIMAL(10,6),
+    position_y    DECIMAL(10,6),
+    create_time   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_digital_media_marker_resource (resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数字媒体标注';
+
+CREATE TABLE IF NOT EXISTS digital_model_metadata (
+    resource_id          BIGINT PRIMARY KEY,
+    model_type           VARCHAR(30),
+    model_stage          VARCHAR(30),
+    model_format         VARCHAR(30),
+    model_title          VARCHAR(255),
+    primary_object_type  VARCHAR(50),
+    primary_object_id    BIGINT,
+    primary_object_code  VARCHAR(60),
+    primary_object_name  VARCHAR(255),
+    scale_unit           VARCHAR(20),
+    real_scale           VARCHAR(50),
+    acquisition_method   VARCHAR(100),
+    acquisition_device   VARCHAR(100),
+    acquisition_date     DATE,
+    processing_software  VARCHAR(100),
+    vertex_count         BIGINT,
+    face_count           BIGINT,
+    point_count          BIGINT,
+    texture_count        BIGINT,
+    layer_count          BIGINT,
+    model_description    TEXT,
+    quality_level        VARCHAR(30),
+    metadata_status      VARCHAR(30) DEFAULT 'incomplete',
+    preview_status       VARCHAR(30),
+    is_key_model         TINYINT DEFAULT 0,
+    sort_time            DATETIME DEFAULT CURRENT_TIMESTAMP,
+    create_time          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time          DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_digital_model_metadata_object (primary_object_type, primary_object_id),
+    INDEX idx_digital_model_metadata_stage (model_stage),
+    INDEX idx_digital_model_metadata_status (metadata_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='三维模型元数据';
+
+CREATE TABLE IF NOT EXISTS digital_model_collection (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    collection_code VARCHAR(60) NOT NULL,
+    collection_name VARCHAR(255) NOT NULL,
+    collection_type VARCHAR(30) DEFAULT 'custom',
+    object_type     VARCHAR(50),
+    object_id       BIGINT,
+    item_count      INT DEFAULT 0,
+    deleted         TINYINT DEFAULT 0,
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_model_collection_code (collection_code),
+    INDEX idx_digital_model_collection_object (object_type, object_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='三维模型集合';
+
+CREATE TABLE IF NOT EXISTS digital_model_collection_item (
+    id            BIGINT PRIMARY KEY AUTO_INCREMENT,
+    collection_id  BIGINT NOT NULL,
+    resource_id    BIGINT NOT NULL,
+    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_digital_model_collection_item (collection_id, resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='三维模型集合条目';

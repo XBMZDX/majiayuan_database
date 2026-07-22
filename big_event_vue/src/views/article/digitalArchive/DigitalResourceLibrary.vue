@@ -70,6 +70,85 @@ const removeRel = async (rel) => {
     await resApi.removeRelation(rel.id); ElMessage.success('已移除'); openDetail({ id: detailData.value.id })
 }
 
+// 新增资源
+const createVisible = ref(false)
+const createSubmitting = ref(false)
+const createForm = reactive({
+    file: null,
+    resourceName: '',
+    title: '',
+    resourceType: 'image',
+    sourceModule: 'manual',
+    description: '',
+    keywords: ''
+})
+const createTypeOptions = [
+    { label: '图片', value: 'image' },
+    { label: '文档', value: 'document' },
+    { label: '报告', value: 'report' },
+    { label: '表格', value: 'spreadsheet' },
+    { label: '视频', value: 'video' },
+    { label: '音频', value: 'audio' },
+    { label: '三维模型', value: 'model_3d' },
+    { label: '其他', value: 'other' }
+]
+const createModuleOptions = [
+    { label: '手工上传', value: 'manual' },
+    { label: '墓葬信息', value: 'tomb' },
+    { label: '文物信息', value: 'artifact' },
+    { label: '检测分析', value: 'detection' },
+    { label: '病害调查', value: 'disease' },
+    { label: '保护修复', value: 'conservation' },
+    { label: '修复过程', value: 'process' },
+    { label: '后续监测', value: 'monitoring' },
+    { label: '数字档案', value: 'digital_archive' }
+]
+const openCreateDialog = () => { createVisible.value = true }
+const handleCreateFileChange = (uploadFile) => {
+    createForm.file = uploadFile.raw
+    if (!createForm.resourceName) {
+        const fileName = uploadFile.name || ''
+        createForm.resourceName = fileName.replace(/\.[^.]+$/, '')
+    }
+    if (!createForm.title) createForm.title = createForm.resourceName
+}
+const handleCreateFileRemove = () => { createForm.file = null }
+const resetCreateForm = () => {
+    createForm.file = null
+    createForm.resourceName = ''
+    createForm.title = ''
+    createForm.resourceType = 'image'
+    createForm.sourceModule = 'manual'
+    createForm.description = ''
+    createForm.keywords = ''
+}
+const submitCreate = async () => {
+    if (!createForm.file) {
+        ElMessage.warning('请先选择文件')
+        return
+    }
+    createSubmitting.value = true
+    try {
+        const fd = new FormData()
+        const defaultName = createForm.file.name.replace(/\.[^.]+$/, '')
+        fd.append('file', createForm.file)
+        fd.append('resourceName', createForm.resourceName || defaultName)
+        fd.append('title', createForm.title || createForm.resourceName || defaultName)
+        fd.append('resourceType', createForm.resourceType)
+        fd.append('sourceModule', createForm.sourceModule)
+        if (createForm.description) fd.append('description', createForm.description)
+        if (createForm.keywords) fd.append('keywords', createForm.keywords)
+        await resApi.createResource(fd)
+        ElMessage.success('资源已上传')
+        createVisible.value = false
+        resetCreateForm()
+        await loadSummary()
+        await loadList()
+    } finally {
+        createSubmitting.value = false
+    }
+}
+
 onMounted(() => { loadSummary(); loadList(); loadTags() })
 </script>
 
@@ -101,6 +180,7 @@ onMounted(() => { loadSummary(); loadList(); loadTags() })
             <el-button type="primary" size="default" @click="handleSearch">查询</el-button>
             <el-button size="default" @click="handleReset">重置</el-button>
             <el-button size="default" :icon="Refresh" @click="loadList" />
+            <el-button type="primary" size="default" :icon="Plus" @click="openCreateDialog">上传/新增资源</el-button>
             <span style="flex:1" />
             <el-button size="default" :type="viewMode==='table'?'primary':''" :icon="List" @click="viewMode='table'" />
             <el-button size="default" :type="viewMode==='card'?'primary':''" :icon="Grid" @click="viewMode='card'" />
@@ -222,6 +302,56 @@ onMounted(() => { loadSummary(); loadList(); loadTags() })
             <el-checkbox v-for="t in allTags" :key="t.id" :label="t.id" :value="t.id">{{ t.tagName }}</el-checkbox>
         </el-checkbox-group>
         <template #footer><el-button @click="tagVisible=false">取消</el-button><el-button type="primary" @click="saveTags">确定</el-button></template>
+    </el-dialog>
+
+    <!-- 新增资源 Dialog -->
+    <el-dialog v-model="createVisible" title="上传/新增资源" width="760px" @closed="resetCreateForm">
+        <el-form :model="createForm" label-width="110px">
+            <el-form-item label="文件">
+                <el-upload
+                    action=""
+                    :auto-upload="false"
+                    :limit="1"
+                    :show-file-list="true"
+                    :on-change="handleCreateFileChange"
+                    :on-remove="handleCreateFileRemove">
+                    <el-button type="primary">选择文件</el-button>
+                </el-upload>
+                <div style="margin-top:6px;color:#909399;font-size:12px">文件会先传到 OSS，MySQL 只保存 URL 和元数据。</div>
+            </el-form-item>
+            <el-form-item label="资源名称">
+                <el-input v-model="createForm.resourceName" placeholder="不填则默认使用文件名" />
+            </el-form-item>
+            <el-form-item label="资源标题">
+                <el-input v-model="createForm.title" placeholder="展示标题" />
+            </el-form-item>
+            <el-row :gutter="12">
+                <el-col :span="12">
+                    <el-form-item label="资源类型">
+                        <el-select v-model="createForm.resourceType" style="width:100%">
+                            <el-option v-for="t in createTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
+                        </el-select>
+                    </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                    <el-form-item label="来源模块">
+                        <el-select v-model="createForm.sourceModule" style="width:100%">
+                            <el-option v-for="m in createModuleOptions" :key="m.value" :label="m.label" :value="m.value" />
+                        </el-select>
+                    </el-form-item>
+                </el-col>
+            </el-row>
+            <el-form-item label="关键词">
+                <el-input v-model="createForm.keywords" placeholder="多个关键词可用逗号分隔" />
+            </el-form-item>
+            <el-form-item label="描述">
+                <el-input v-model="createForm.description" type="textarea" :rows="4" placeholder="资源说明" />
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button @click="createVisible = false">取消</el-button>
+            <el-button type="primary" :loading="createSubmitting" @click="submitCreate">提交</el-button>
+        </template>
     </el-dialog>
 </template>
 

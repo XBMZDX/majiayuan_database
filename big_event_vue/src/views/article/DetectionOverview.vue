@@ -65,7 +65,8 @@ const detailEditMode = ref(false); const detailBackup = ref({})
 const openDetail = (row) => { detailData.value = { ...row }; detailEditMode.value = false; detailVisible.value = true; detailCascader.value = [] }
 const enterDetailEditMode = () => { detailBackup.value = { ...detailData.value }; detailEditMode.value = true; detailCascader.value = parsePath(detailData.value.excavationRelic || '') }
 const cancelDetailEdit = () => { detailData.value = { ...detailBackup.value }; detailEditMode.value = false }
-const saveDetailEdit = async () => { detailData.value.excavationRelic = getPath(detailCascader.value); await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
+const normalizeArtifactCode = value => String(value || '').trim().replace(/：/g, ':')
+const saveDetailEdit = async () => { detailData.value.artifactCode = normalizeArtifactCode(detailData.value.artifactCode); detailData.value.excavationRelic = getPath(detailCascader.value); await request.put('/admin/detection/' + detailData.value.id, detailData.value); ElMessage.success('保存成功'); detailEditMode.value = false; fetchList() }
 
 // 照片上传（与检测实验总览完全一致）
 const onDetailPhoto = (res) => { detailData.value.samplePhoto = res.data }
@@ -155,11 +156,11 @@ const resetAddForm = () => {
     addCascader.value = []
 }
 const onAddClosed = () => { resetAddForm() }
-const submitAdd = async () => { const d = { ...addForm.value }; d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
+const submitAdd = async () => { const d = { ...addForm.value }; d.artifactCode = normalizeArtifactCode(d.artifactCode); d.serialNumber = String(list.value.length + 1); d.excavationRelic = getPath(addCascader.value); await request.post('/admin/detection', d); ElMessage.success('添加成功'); addVisible.value = false; fetchList() }
 
 const editVisible = ref(false); const editData = ref({})
 const openEdit = (row) => { editData.value = { ...row }; editVisible.value = true; editCascader.value = parsePath(row.excavationRelic || '') }
-const submitEdit = async () => { editData.value.excavationRelic = getPath(editCascader.value); await request.put('/admin/detection/' + editData.value.id, editData.value); ElMessage.success('保存成功'); editVisible.value = false; fetchList() }
+const submitEdit = async () => { editData.value.artifactCode = normalizeArtifactCode(editData.value.artifactCode); editData.value.excavationRelic = getPath(editCascader.value); await request.put('/admin/detection/' + editData.value.id, editData.value); ElMessage.success('保存成功'); editVisible.value = false; fetchList() }
 
 onMounted(() => { fetchList(); fetchBurialData(); fetchLabInstruments() })
 </script>

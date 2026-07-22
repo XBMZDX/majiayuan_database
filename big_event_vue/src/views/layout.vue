@@ -71,8 +71,6 @@ const menuTitleMap = {
     '/archive/files': '文件资源库',
     '/archive/media': '图像与多媒体',
     '/archive/models': '三维模型库',
-    '/library/manage': '知识中心',
-    '/ai/manage': 'AI智能助手',
     '/user/info': '基本资料',
     '/user/avatar': '更换头像',
     '/user/resetPassword': '重置密码'
@@ -194,14 +192,6 @@ const handleCommand = (command) => {
                     <el-menu-item index="/archive/media">图像与多媒体</el-menu-item>
                     <el-menu-item index="/archive/models">三维模型库</el-menu-item>
                 </el-sub-menu>
-                <el-menu-item index="/library/manage">
-                    <el-icon><Reading /></el-icon>
-                    <span>知识中心</span>
-                </el-menu-item>
-                <el-menu-item index="/ai/manage">
-                    <el-icon><ChatDotSquare /></el-icon>
-                    <span>AI智能助手</span>
-                </el-menu-item>
                 <el-sub-menu index="/user">
                     <template #title>
                         <el-icon>

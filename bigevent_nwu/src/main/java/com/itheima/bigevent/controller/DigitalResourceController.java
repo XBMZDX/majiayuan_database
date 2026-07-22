@@ -1,10 +1,17 @@
 package com.itheima.bigevent.controller;
 
 import com.itheima.bigevent.pojo.Result;
+import com.itheima.bigevent.utils.AliOssUtil;
+import com.itheima.bigevent.utils.ThreadLocalUtil;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
+import java.util.UUID;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/digital-resources")
@@ -65,6 +72,84 @@ public class DigitalResourceController {
     @PutMapping("/{id}")
     public Result update(@PathVariable Long id, @RequestBody Map<String,Object> body) {
         mapper.updateMeta(id, body); return Result.success();
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Map<String,Object>> create(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam Map<String,String> metadata) throws Exception {
+        if (file == null || file.isEmpty()) {
+            return Result.error("请先选择要上传的文件");
+        }
+        String originalName = Optional.ofNullable(file.getOriginalFilename()).orElse("file");
+        String resourceType = text(metadata.get("resourceType"));
+        if (resourceType.isEmpty()) resourceType = inferResourceType(originalName);
+        String sourceModule = defaultText(metadata.get("sourceModule"), "manual");
+        String resourceName = defaultText(metadata.get("resourceName"), baseName(originalName));
+        String title = defaultText(metadata.get("title"), resourceName);
+        String description = text(metadata.get("description"));
+        String keywords = text(metadata.get("keywords"));
+        String resourceStatus = defaultText(metadata.get("resourceStatus"), "normal");
+        String dataStatus = defaultText(metadata.get("dataStatus"), "incomplete");
+        String fileExtension = fileExtension(originalName);
+        String resourceCode = "DR-" + System.currentTimeMillis();
+        String objectName = "digital-resource/" + UUID.randomUUID() + fileExtension;
+        String fileUrl = AliOssUtil.uploadFile(objectName, file.getInputStream());
+        String thumbnailUrl = "image".equals(resourceType) ? fileUrl : null;
+        String previewUrl = ("image".equals(resourceType) || "video".equals(resourceType) || "audio".equals(resourceType) || "model_3d".equals(resourceType))
+            ? fileUrl : null;
+        String uploadedBy = currentUserName();
+        Map<String,Object> row = new LinkedHashMap<>();
+        row.put("resourceCode", resourceCode);
+        row.put("resourceName", resourceName);
+        row.put("title", title);
+        row.put("originalFileName", originalName);
+        row.put("resourceType", resourceType);
+        row.put("sourceModule", sourceModule);
+        row.put("fileExtension", fileExtension);
+        row.put("fileSize", file.getSize());
+        row.put("fileUrl", fileUrl);
+        row.put("thumbnailUrl", thumbnailUrl);
+        row.put("previewUrl", previewUrl);
+        row.put("resourceStatus", resourceStatus);
+        row.put("dataStatus", dataStatus);
+        row.put("currentVersion", "V1.0");
+        row.put("versionCount", 1);
+        row.put("uploadedBy", uploadedBy);
+        row.put("description", description);
+        row.put("keywords", keywords);
+        mapper.insertResource(row);
+        Long id = mapper.lastInsertId();
+        if (id != null) {
+            if (Set.of("image", "video", "audio").contains(resourceType)) {
+                mapper.insertMediaMetadata(id, resourceType);
+            } else if ("model_3d".equals(resourceType)) {
+                mapper.insertModelMetadata(id);
+            }
+            Map<String,Object> version = new LinkedHashMap<>();
+            version.put("resourceId", id);
+            version.put("versionNo", "V1.0");
+            version.put("versionName", resourceName);
+            version.put("versionType", "original");
+            version.put("originalFileName", originalName);
+            version.put("fileExtension", fileExtension);
+            version.put("fileSize", file.getSize());
+            version.put("fileUrl", fileUrl);
+            version.put("contentType", file.getContentType());
+            version.put("versionStatus", "current");
+            mapper.insertVersion(version);
+            mapper.logOp(id, "create", "新增资源");
+            Map<String,Object> detail = mapper.detail(id);
+            if (detail != null) {
+                detail.put("relations", mapper.relations(id));
+                detail.put("versions", mapper.versions(id));
+                detail.put("tags", mapper.tags(id));
+                detail.put("logs", mapper.logs(id));
+                return Result.success(detail);
+            }
+        }
+        return Result.success(row);
     }
 
     @DeleteMapping("/{id}")
@@ -202,6 +287,12 @@ public class DigitalResourceController {
         @Select("SELECT * FROM digital_resource WHERE id=#{id}")
         Map<String,Object> detail(Long id);
 
+        @Insert("INSERT INTO digital_resource (resource_code,resource_name,title,original_file_name,resource_type,source_module,file_extension,file_size,file_url,thumbnail_url,preview_url,resource_status,data_status,current_version,version_count,uploaded_by,upload_time,update_time,description,keywords,deleted) VALUES (#{p.resourceCode},#{p.resourceName},#{p.title},#{p.originalFileName},#{p.resourceType},#{p.sourceModule},#{p.fileExtension},#{p.fileSize},#{p.fileUrl},#{p.thumbnailUrl},#{p.previewUrl},#{p.resourceStatus},#{p.dataStatus},#{p.currentVersion},#{p.versionCount},#{p.uploadedBy},NOW(),NOW(),#{p.description},#{p.keywords},0)")
+        void insertResource(@Param("p") Map<String,Object> p);
+
+        @Select("SELECT LAST_INSERT_ID()")
+        Long lastInsertId();
+
         @Update("<script>UPDATE digital_resource SET resource_name=COALESCE(#{p.resourceName},resource_name), title=COALESCE(#{p.title},title), source_module=COALESCE(#{p.sourceModule},source_module), resource_type=COALESCE(#{p.resourceType},resource_type), description=COALESCE(#{p.description},description), keywords=COALESCE(#{p.keywords},keywords), data_status=COALESCE(#{p.dataStatus},data_status) WHERE id=#{id}</script>")
         void updateMeta(@Param("id") Long id, @Param("p") Map<String,Object> body);
 
@@ -236,6 +327,9 @@ public class DigitalResourceController {
         @Delete("DELETE FROM digital_resource_version WHERE resource_id=#{id}")
         void deleteVersions(Long id);
 
+        @Insert("INSERT INTO digital_resource_version (resource_id,version_no,version_name,version_type,original_file_name,file_extension,file_size,file_url,content_type,version_status,create_time) VALUES (#{p.resourceId},#{p.versionNo},#{p.versionName},#{p.versionType},#{p.originalFileName},#{p.fileExtension},#{p.fileSize},#{p.fileUrl},#{p.contentType},#{p.versionStatus},NOW())")
+        void insertVersion(@Param("p") Map<String,Object> p);
+
         @Select("SELECT t.id,t.tag_name AS tagName,t.tag_type AS tagCategory FROM digital_resource_tag t INNER JOIN digital_resource_tag_relation tr ON tr.tag_id=t.id WHERE tr.resource_id=#{id}")
         List<Map<String,Object>> tags(Long id);
         @Select("SELECT * FROM digital_resource_tag WHERE deleted=0 ORDER BY tag_type,tag_name")
@@ -251,5 +345,53 @@ public class DigitalResourceController {
         List<Map<String,Object>> logs(Long id);
         @Insert("INSERT INTO digital_resource_operation_log (resource_id,operation_type,operation_description) VALUES (#{rid},#{type},#{desc})")
         void logOp(Long rid, String type, String desc);
+
+        @Insert("INSERT INTO digital_media_metadata (resource_id,media_type,metadata_status) VALUES (#{rid},#{type},'incomplete')")
+        void insertMediaMetadata(Long rid, String type);
+
+        @Insert("INSERT INTO digital_model_metadata (resource_id,model_type,model_stage,metadata_status) VALUES (#{rid},'scan','raw','incomplete')")
+        void insertModelMetadata(Long rid);
+    }
+
+    private String text(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String defaultText(String value, String fallback) {
+        String v = text(value);
+        return v.isEmpty() ? fallback : v;
+    }
+
+    private String baseName(String fileName) {
+        int idx = fileName.lastIndexOf('.');
+        return idx > 0 ? fileName.substring(0, idx) : fileName;
+    }
+
+    private String fileExtension(String fileName) {
+        int idx = fileName.lastIndexOf('.');
+        return idx >= 0 ? fileName.substring(idx).toLowerCase(Locale.ROOT) : "";
+    }
+
+    private String inferResourceType(String fileName) {
+        String ext = fileExtension(fileName).replace(".", "");
+        if (Set.of("jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff").contains(ext)) return "image";
+        if (Set.of("mp4", "mov", "avi", "mkv", "flv", "webm").contains(ext)) return "video";
+        if (Set.of("mp3", "wav", "aac", "flac", "ogg").contains(ext)) return "audio";
+        if (Set.of("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf").contains(ext)) return "document";
+        if (Set.of("obj", "fbx", "gltf", "glb", "stl", "ply", "3ds").contains(ext)) return "model_3d";
+        return "other";
+    }
+
+    private String currentUserName() {
+        try {
+            Map<String,Object> user = ThreadLocalUtil.get();
+            if (user != null) {
+                Object nickname = user.get("nickname");
+                if (nickname != null && !nickname.toString().trim().isEmpty()) return nickname.toString().trim();
+                Object username = user.get("username");
+                if (username != null && !username.toString().trim().isEmpty()) return username.toString().trim();
+            }
+        } catch (Exception ignored) {}
+        return "system";
     }
 }

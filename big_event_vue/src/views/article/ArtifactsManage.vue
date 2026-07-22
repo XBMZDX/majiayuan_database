@@ -106,6 +106,32 @@ const fetchFilterOptions = async () => {
     } catch (e) { /* ignore */ }
 }
 
+const normalizeCode = (value) => String(value || '').trim().replace(/：/g, ':').replace(/[\s\-_]/g, '')
+const normalizeName = (value) => String(value || '').trim()
+const splitDetectionNames = (value) => String(value || '').split('/').map(item => item.trim()).filter(Boolean)
+const buildTestingStatusDisplay = (artifact, detections) => {
+    const artifactCodes = [
+        normalizeCode(artifact.newArtifactCode),
+        normalizeCode(artifact.originalArtifactCode)
+    ].filter(Boolean)
+    const artifactNames = [
+        normalizeName(artifact.newArtifactName),
+        normalizeName(artifact.originalArtifactName)
+    ].filter(Boolean)
+    const names = []
+    detections.forEach(item => {
+        const detectionCode = normalizeCode(item.artifactCode)
+        const detectionName = normalizeName(item.artifactName)
+        const matchedByCode = detectionCode && artifactCodes.includes(detectionCode)
+        const matchedByName = !detectionCode && detectionName && artifactNames.includes(detectionName)
+        if (!matchedByCode && !matchedByName) return
+        const labels = splitDetectionNames(item.purpose || item.instrumentName)
+        if (labels.length) names.push(...labels)
+        else names.push(`检测分析#${item.id}`)
+    })
+    return [...new Set(names)].join(' / ') || '无'
+}
+
 const artifactsList = async () => {
     let params = {
         pageNum: pageNum.value,
@@ -116,8 +142,15 @@ const artifactsList = async () => {
         excavationRelic: searchParams.value.excavationRelic,
         completeness: searchParams.value.completeness,
     }
-    let result = await artifactsListService(params);
-    artifacts.value = result.data.items;
+    const [result, detectionResult] = await Promise.all([
+        artifactsListService(params),
+        request.get('/admin/detection').catch(() => ({ data: [] }))
+    ])
+    const detections = detectionResult.data || []
+    artifacts.value = (result.data.items || []).map(item => ({
+        ...item,
+        testingStatusDisplay: buildTestingStatusDisplay(item, detections) || item.testingStatusDisplay || '无'
+    }))
     total.value = result.data.total;
 }
 artifactsList();
@@ -274,6 +307,21 @@ const openDetail = (row) => {
     detailEditMode.value = false
     visibleDetailDrawer.value = true
 }
+
+const getTestingStatusText = (row) => row?.testingStatusDisplay || row?.testingStatus || '无'
+const getArtifactImage = (row) => {
+    const value = row?.images
+    if (!value) return ''
+    try {
+        const parsed = JSON.parse(value)
+        if (Array.isArray(parsed)) {
+            const first = parsed.find(Boolean)
+            return typeof first === 'string' ? first : first?.url || ''
+        }
+    } catch (e) {}
+    return String(value).split(',').map(item => item.trim()).filter(Boolean)[0] || ''
+}
+const clearDetailImage = () => { detailData.value.images = '' }
 
 // 进入编辑模式（备份当前数据，初始化级联选择器）
 const enterDetailEditMode = () => {
@@ -454,7 +502,11 @@ const handleImport = async () => {
             <el-table-column label="材质" prop="material1" />
             <el-table-column label="完整度" prop="completeness" />
             <el-table-column label="数量" prop="quantity1" />
-            <el-table-column label="科技检测情况" prop="testingStatus" />
+            <el-table-column label="科技检测情况" width="220">
+                <template #default="{ row }">
+                    <span>{{ getTestingStatusText(row) }}</span>
+                </template>
+            </el-table-column>
             <el-table-column label="操作" fixed="right">
                 <template #default="{ row }">
                     <el-link type="primary" @click="openDetail(row)">详情</el-link>
@@ -602,11 +654,20 @@ const handleImport = async () => {
                 <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="定级情况">{{ detailData.gradingStatus || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="科技检测情况">{{ detailData.testingStatus || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="科技检测情况">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
                 <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="视觉特征" :span="2"><div v-html="detailData.artifactDescription || '—'" /></el-descriptions-item>
+                <el-descriptions-item label="文物图片" :span="2">
+                    <el-image
+                        v-if="getArtifactImage(detailData)"
+                        :src="getArtifactImage(detailData)"
+                        :preview-src-list="[getArtifactImage(detailData)]"
+                        fit="cover"
+                        class="detail-artifact-image" />
+                    <span v-else>—</span>
+                </el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ detailData.createTime || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="更新时间">{{ detailData.updateTime || '—' }}</el-descriptions-item>
             </el-descriptions>
@@ -658,6 +719,7 @@ const handleImport = async () => {
                                 <img v-if="detailData.images" :src="detailData.images" class="avatar" />
                                 <el-icon v-else class="avatar-uploader-icon"><Plus /></el-icon>
                             </el-upload>
+                            <el-button v-if="detailData.images" type="danger" link style="margin-top:8px" @click="clearDetailImage">移除图片</el-button>
                         </el-form-item>
                     </el-col>
                 </el-row>
@@ -716,6 +778,7 @@ const handleImport = async () => {
         .el-icon.avatar-uploader-icon { font-size: 28px; color: #8c939d; width: 178px; height: 178px; text-align: center; }
     }
 }
+.detail-artifact-image { width: 220px; height: 160px; border-radius: 8px; border: 1px solid #ebeef5; }
 .editor { width: 100%; :deep(.ql-editor) { min-height: 150px; } }
 .batch-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 10px; background: #fef0f0; border: 1px solid #fde2e2; border-radius: 4px; .batch-info { color: #e64242; font-size: 14px; } }
 </style>

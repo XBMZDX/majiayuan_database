@@ -12,9 +12,7 @@ import CoffinArtifacts from '@/views/article/CoffinArtifacts.vue'
 import ChariotBasic from '@/views/article/ChariotBasic.vue'
 import ChariotArtifacts from '@/views/article/ChariotArtifacts.vue'
 import DetectionAnalysis from '@/views/article/DetectionAnalysis.vue'
-import DigitalLibrary from '@/views/article/DigitalLibrary.vue'
 import DigitalArchive from '@/views/article/DigitalArchive.vue'
-import AiChat from '@/views/article/AiChat.vue'
 import LabInstruments from '@/views/article/LabInstruments.vue'
 import DetectionOverview from '@/views/article/DetectionOverview.vue'
 import DetectionResult from '@/views/article/DetectionResult.vue'
@@ -55,12 +53,10 @@ const routes = [
         {path:'/conservation/project/:projectId/comparison',component:()=>import('@/views/article/conservation/ConservationComparison.vue'),meta:{moduleName:'修复前后对比'}},
         {path:'/conservation/project/:projectId/restoration',component:()=>import('@/views/article/conservation/ConservationRestoration.vue'),meta:{moduleName:'文物复原成果'}},
         {path:'/conservation/project/:projectId/monitoring',component:()=>import('@/views/article/conservation/Monitor.vue')},
-         {path:'/library/manage',component:DigitalLibrary},
          {path:'/archive/manage',component:()=>import('@/views/article/digitalArchive/ArchiveResourceOverview.vue')},
          {path:'/archive/files',component:()=>import('@/views/article/digitalArchive/DigitalResourceLibrary.vue')},
          {path:'/archive/media',component:()=>import('@/views/article/digitalArchive/MediaResourceCenter.vue')},
          {path:'/archive/models',component:()=>import('@/views/article/digitalArchive/ThreeDimensionalModelLibrary.vue')},
-         {path:'/ai/manage',component:AiChat},
         {path:'/detection/experiment',component:LabInstruments},
         {path:'/user/info',component:UserInfoVue},
         {path:'/user/avatar',component:UserAvatarVue},

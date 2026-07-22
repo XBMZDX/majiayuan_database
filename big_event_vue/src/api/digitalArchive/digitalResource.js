@@ -2,6 +2,7 @@ import request from '@/utils/request'
 
 export const getSummary = (p) => request({ url: '/api/digital-resources/summary', method: 'get', params: p })
 export const getList = (p) => request({ url: '/api/digital-resources', method: 'get', params: p })
+export const createResource = (data) => request({ url: '/api/digital-resources', method: 'post', data })
 export const getDetail = (id) => request({ url: `/api/digital-resources/${id}`, method: 'get' })
 export const updateMeta = (id, data) => request({ url: `/api/digital-resources/${id}`, method: 'put', data })
 export const softDelete = (id) => request({ url: `/api/digital-resources/${id}`, method: 'delete' })

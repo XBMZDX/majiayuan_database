@@ -47,7 +47,37 @@
 
     <!-- 动态查询文物列表 -->
     <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
-        SELECT * FROM artifacts
+        SELECT a.*,
+               COALESCE((
+                   SELECT GROUP_CONCAT(
+                              DISTINCT COALESCE(NULLIF(TRIM(da.purpose), ''), NULLIF(TRIM(da.instrument_name), ''), CONCAT('检测分析#', da.id))
+                              ORDER BY da.id SEPARATOR ' / '
+                          )
+                   FROM detection_analysis da
+                   WHERE (
+                       (
+                           da.artifact_code IS NOT NULL AND TRIM(da.artifact_code) <> ''
+                           AND (
+                               (a.new_artifact_code IS NOT NULL AND TRIM(a.new_artifact_code) <> ''
+                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.new_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', ''))
+                               OR (a.original_artifact_code IS NOT NULL AND TRIM(a.original_artifact_code) <> ''
+                                   AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                       = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.original_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', ''))
+                           )
+                       )
+                       OR (
+                           (da.artifact_code IS NULL OR TRIM(da.artifact_code) = '')
+                           AND
+                           da.artifact_name IS NOT NULL AND TRIM(da.artifact_name) <> ''
+                           AND (
+                               (a.new_artifact_name IS NOT NULL AND TRIM(a.new_artifact_name) <> '' AND TRIM(da.artifact_name) = TRIM(a.new_artifact_name))
+                               OR (a.original_artifact_name IS NOT NULL AND TRIM(a.original_artifact_name) <> '' AND TRIM(da.artifact_name) = TRIM(a.original_artifact_name))
+                           )
+                       )
+                   )
+               ), '无') AS testing_status_display
+        FROM artifacts a
         <where>
             <if test="newArtifactName != null and newArtifactName != ''">
                 AND new_artifact_name LIKE CONCAT('%', #{newArtifactName}, '%')
@@ -65,6 +95,6 @@
                 AND completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
-        ORDER BY CAST(serial_number AS UNSIGNED) ASC
+        ORDER BY CAST(a.serial_number AS UNSIGNED) ASC
     </select>
 </mapper>
