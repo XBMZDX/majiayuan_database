@@ -1,9 +1,11 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { useTokenStore } from '@/stores/token.js'
 const token = computed(() => useTokenStore().token)
+const route = useRoute()
 
 const list = ref([])
 const stats = ref({ total: 0, relicDistribution: [], purposeDistribution: [] })
@@ -59,6 +61,12 @@ const filtered = computed(() => list.value.filter(r =>
 const pagedFiltered = computed(() => filtered.value.slice((pageNum.value-1)*pageSize.value, pageNum.value*pageSize.value))
 const handleSearch = () => { pageNum.value = 1 }
 const handleReset = () => { searchParams.value = { artifactCode: '', artifactName: '', sampleMaterial: '', purpose: '' }; filterCascader.value = []; pageNum.value = 1 }
+
+// 从“检测实验总览”进入时，自动按该实验方法筛选检测记录。
+watch(() => route.query.method, method => {
+    searchParams.value.purpose = typeof method === 'string' ? method : ''
+    handleSearch()
+}, { immediate: true })
 
 const detailVisible = ref(false); const detailData = ref({})
 const detailEditMode = ref(false); const detailBackup = ref({})

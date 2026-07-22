@@ -388,9 +388,32 @@ CREATE TABLE IF NOT EXISTS lab_instruments (
     conditions  TEXT         COMMENT '实验条件',
     method      VARCHAR(500) COMMENT '实验方法文档URL',
     method_name VARCHAR(200) COMMENT '实验方法文档名',
+    applicable_materials VARCHAR(500) COMMENT '适用文物材质，使用 / 分隔',
+    research_purposes    VARCHAR(500) COMMENT '可解决的问题/研究目的，使用 / 分隔',
+    non_destructive      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否无损：0否，1是',
+    requires_sampling    TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否需要取样：0否，1是',
+    main_outputs         TEXT         COMMENT '主要产出',
     create_time DATETIME     DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME     DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='仪器分析表';
+
+-- 已存在的本地数据库字段升级（兼容不支持 ADD COLUMN IF NOT EXISTS 的 MySQL 版本）。
+SET @lab_table = 'lab_instruments';
+SET @lab_column = 'applicable_materials';
+SET @lab_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @lab_table AND COLUMN_NAME = @lab_column) = 0, 'ALTER TABLE lab_instruments ADD COLUMN applicable_materials VARCHAR(500)', 'SELECT 1');
+PREPARE lab_stmt FROM @lab_sql; EXECUTE lab_stmt; DEALLOCATE PREPARE lab_stmt;
+SET @lab_column = 'research_purposes';
+SET @lab_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @lab_table AND COLUMN_NAME = @lab_column) = 0, 'ALTER TABLE lab_instruments ADD COLUMN research_purposes VARCHAR(500)', 'SELECT 1');
+PREPARE lab_stmt FROM @lab_sql; EXECUTE lab_stmt; DEALLOCATE PREPARE lab_stmt;
+SET @lab_column = 'non_destructive';
+SET @lab_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @lab_table AND COLUMN_NAME = @lab_column) = 0, 'ALTER TABLE lab_instruments ADD COLUMN non_destructive TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE lab_stmt FROM @lab_sql; EXECUTE lab_stmt; DEALLOCATE PREPARE lab_stmt;
+SET @lab_column = 'requires_sampling';
+SET @lab_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @lab_table AND COLUMN_NAME = @lab_column) = 0, 'ALTER TABLE lab_instruments ADD COLUMN requires_sampling TINYINT(1) NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE lab_stmt FROM @lab_sql; EXECUTE lab_stmt; DEALLOCATE PREPARE lab_stmt;
+SET @lab_column = 'main_outputs';
+SET @lab_sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @lab_table AND COLUMN_NAME = @lab_column) = 0, 'ALTER TABLE lab_instruments ADD COLUMN main_outputs TEXT', 'SELECT 1');
+PREPARE lab_stmt FROM @lab_sql; EXECUTE lab_stmt; DEALLOCATE PREPARE lab_stmt;
 
 -- ============================================
 -- 10. 分析结果模块
@@ -424,6 +447,12 @@ CREATE TABLE IF NOT EXISTS experiment_results (
     create_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME     DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='实验结果表';
+
+-- 检测实验名称会跨表关联。统一这些表的排序规则，避免 FIND_IN_SET 或等值比较出现排序规则冲突。
+ALTER TABLE detection_analysis CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE lab_instruments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE analysis_results CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE experiment_results CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- ============================================
 -- 11. 文物保护修复模块

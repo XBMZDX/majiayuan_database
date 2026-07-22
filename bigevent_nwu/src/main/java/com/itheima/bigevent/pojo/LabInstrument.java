@@ -18,6 +18,13 @@ public class LabInstrument {
     private String conditions;
     private String method;
     private String methodName;
+    private String applicableMaterials;
+    private String researchPurposes;
+    private Boolean nonDestructive;
+    private Boolean requiresSampling;
+    private String mainOutputs;
+    private Integer appliedArtifactCount;
+    private Integer completedDetectionCount;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

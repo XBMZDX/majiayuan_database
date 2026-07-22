@@ -27,6 +27,7 @@ public class LabInstrumentController {
 
     @PostMapping
     public Result add(@RequestBody LabInstrument instrument) {
+        applyDisplayDefaults(instrument);
         mapper.insert(instrument);
         return Result.success();
     }
@@ -34,6 +35,7 @@ public class LabInstrumentController {
     @PutMapping("/{id}")
     public Result update(@PathVariable Integer id, @RequestBody LabInstrument instrument) {
         instrument.setId(id);
+        applyDisplayDefaults(instrument);
         mapper.update(instrument);
         return Result.success();
     }
@@ -42,5 +44,10 @@ public class LabInstrumentController {
     public Result delete(@PathVariable Integer id) {
         mapper.delete(id);
         return Result.success();
+    }
+
+    private void applyDisplayDefaults(LabInstrument instrument) {
+        if (instrument.getNonDestructive() == null) instrument.setNonDestructive(false);
+        if (instrument.getRequiresSampling() == null) instrument.setRequiresSampling(false);
     }
 }
