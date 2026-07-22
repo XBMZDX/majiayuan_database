@@ -53,7 +53,7 @@ const saveEdit = async () => {
 const showDialog = ref(false)
 const defaultForm = () => ({
     burialNo: '', name: '', siteName: '', era: '',
-    burialType: '', excavationDate: null,
+    burialType: '', orientation: '', burialStyle: '', robberHole: '无', excavationDate: null,
     hasCoffin: false, hasChariot: false,
     coffinCount: 0, coffinMaterial: '', coffinDecoration: '', skeletonStatus: '',
     chariotCount: 0, horseCount: 0, chariotDecoration: '', chariotType: '',
@@ -99,10 +99,15 @@ onMounted(() => { fetchBurialList() })
                     <el-tag :type="b.status === '已发掘' ? 'success' : b.status === '发掘中' ? 'warning' : 'danger'" size="small">{{ b.status }}</el-tag>
                 </div>
                 <el-divider style="margin:8px 0" />
-                <div class="info-item"><label>年代</label><span>{{ b.era || '-' }}</span></div>
-                <div class="info-item"><label>墓葬形制</label><span>{{ b.burialType || '-' }}</span></div>
+                <div class="card-info-grid">
+                    <div class="info-item"><label>年代</label><span>{{ b.era || '-' }}</span></div>
+                    <div class="info-item"><label>墓葬形制</label><span>{{ b.burialType || '-' }}</span></div>
+                    <div class="info-item"><label>朝向</label><span>{{ b.orientation || '-' }}</span></div>
+                    <div class="info-item"><label>葬式</label><span>{{ b.burialStyle || '-' }}</span></div>
+                    <div class="info-item"><label>盗洞</label><span>{{ b.robberHole || '-' }}</span></div>
+                    <div class="info-item"><label>人骨保存</label><span>{{ b.bonePreservation || '-' }}</span></div>
+                </div>
                 <div class="info-item"><label>发掘时间</label><span>{{ b.excavationDate || '-' }}</span></div>
-                <div class="info-item"><label>人骨保存</label><span>{{ b.bonePreservation || '-' }}</span></div>
                 <el-divider style="margin:8px 0" />
                 <div style="font-size:12px;font-weight:600;margin-bottom:4px">葬具配置</div>
                 <div class="info-item"><label>有棺</label><span>{{ b.hasCoffin ? '是（' + b.coffinCount + '）' : '否' }}</span></div>
@@ -120,6 +125,11 @@ onMounted(() => { fetchBurialList() })
                 <el-col :span="12"><el-form-item label="墓葬编号"><el-input v-model="form.burialNo" placeholder="如 M001" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="年代"><el-input v-model="form.era" placeholder="如 战国中期" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="墓葬形制"><el-input v-model="form.burialType" placeholder="如 竖穴土坑" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="朝向"><el-input v-model="form.orientation" placeholder="如 南北向" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="葬式"><el-input v-model="form.burialStyle" placeholder="如 仰身直肢葬" /></el-form-item></el-col>
+                <el-col :span="12"><el-form-item label="盗洞">
+                    <el-select v-model="form.robberHole" style="width:100%"><el-option label="有" value="有" /><el-option label="无" value="无" /></el-select>
+                </el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="发掘时间"><el-date-picker v-model="form.excavationDate" type="date" placeholder="选择日期" style="width:100%" value-format="YYYY-MM-DD" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="墓葬状态">
                     <el-select v-model="form.status" style="width:100%"><el-option label="待发掘" value="待发掘" /><el-option label="发掘中" value="发掘中" /><el-option label="已发掘" value="已发掘" /></el-select>
@@ -170,6 +180,9 @@ onMounted(() => { fetchBurialList() })
                 <el-descriptions-item label="墓葬编号">{{ detailData.burialNo || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="年代">{{ detailData.era || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="墓葬形制">{{ detailData.burialType || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="朝向">{{ detailData.orientation || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="葬式">{{ detailData.burialStyle || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="盗洞">{{ detailData.robberHole || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="发掘时间">{{ detailData.excavationDate || '-' }}</el-descriptions-item>
                 <el-descriptions-item label="墓葬状态">
                     <el-tag :type="detailData.status === '已发掘' ? 'success' : detailData.status === '发掘中' ? 'warning' : 'danger'" size="small">{{ detailData.status || '-' }}</el-tag>
@@ -191,6 +204,11 @@ onMounted(() => { fetchBurialList() })
                     <el-col :span="12"><el-form-item label="墓葬编号"><el-input v-model="detailData.burialNo" /></el-form-item></el-col>
                     <el-col :span="12"><el-form-item label="年代"><el-input v-model="detailData.era" /></el-form-item></el-col>
                     <el-col :span="12"><el-form-item label="墓葬形制"><el-input v-model="detailData.burialType" /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="朝向"><el-input v-model="detailData.orientation" /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="葬式"><el-input v-model="detailData.burialStyle" /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="盗洞">
+                        <el-select v-model="detailData.robberHole" style="width:100%"><el-option label="有" value="有" /><el-option label="无" value="无" /></el-select>
+                    </el-form-item></el-col>
                     <el-col :span="12"><el-form-item label="发掘时间"><el-date-picker v-model="detailData.excavationDate" type="date" style="width:100%" value-format="YYYY-MM-DD" /></el-form-item></el-col>
                     <el-col :span="12"><el-form-item label="墓葬状态">
                         <el-select v-model="detailData.status" style="width:100%"><el-option label="待发掘" value="待发掘" /><el-option label="发掘中" value="发掘中" /><el-option label="已发掘" value="已发掘" /></el-select>
@@ -244,6 +262,7 @@ onMounted(() => { fetchBurialList() })
 .tomb-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 .card-title { font-size: 15px; font-weight: 700; color: #1D2129; }
+.card-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 2px; }
 .info-item { margin-bottom: 6px; }
 .info-item label { font-size: 11px; color: #999; display: block; margin-bottom: 1px; }
 .info-item span { font-size: 13px; color: #1D2129; }

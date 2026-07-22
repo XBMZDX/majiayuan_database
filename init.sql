@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS burial (
     site_name          VARCHAR(200)  COMMENT '所属遗址',
     era                VARCHAR(100)  COMMENT '年代',
     burial_type        VARCHAR(100)  COMMENT '墓葬类型',
+    orientation        VARCHAR(100)  COMMENT '朝向',
+    burial_style       VARCHAR(100)  COMMENT '葬式',
+    robber_hole        VARCHAR(10)   COMMENT '盗洞：有/无',
     excavation_date    DATE          COMMENT '发掘时间',
     has_coffin         TINYINT       DEFAULT 0 COMMENT '有棺',
     has_chariot        TINYINT       DEFAULT 0 COMMENT '有车',
@@ -169,6 +172,23 @@ CREATE TABLE IF NOT EXISTS artifacts (
     create_time           DATETIME,
     update_time           DATETIME
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出土文物表';
+
+-- 3.4 文物图片表（详情图库）
+CREATE TABLE IF NOT EXISTS artifact_image (
+    id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+    artifact_id  INT          NOT NULL COMMENT '关联文物ID',
+    image_url    VARCHAR(1000) NOT NULL COMMENT '图片URL',
+    image_name   VARCHAR(255) COMMENT '图片名称',
+    description  VARCHAR(1000) COMMENT '图片说明',
+    is_cover     TINYINT DEFAULT 0 COMMENT '是否封面',
+    sort_order   INT DEFAULT 0 COMMENT '排序',
+    upload_time  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted      TINYINT DEFAULT 0,
+    INDEX idx_artifact_image_artifact (artifact_id),
+    INDEX idx_artifact_image_cover (artifact_id, is_cover),
+    INDEX idx_artifact_image_deleted (deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文物详情图片图库';
 
 -- ============================================
 -- 4. 分类字典表

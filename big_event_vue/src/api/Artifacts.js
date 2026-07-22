@@ -30,3 +30,24 @@ export const artifactsBatchImportService = (artifactsData) => {
 export const artifactsBatchDeleteService = (ids) => {
     return request.post('/artifacts/batch-delete', ids)
 }
+
+// 文物详情图片图库
+export const artifactImagesListService = (artifactId) => {
+    return request.get(`/artifacts/${artifactId}/images`)
+}
+
+export const artifactImageUploadService = (artifactId, formData) => {
+    return request.post(`/artifacts/${artifactId}/images`, formData)
+}
+
+export const artifactImageUpdateService = (imageId, imageData) => {
+    return request.put(`/artifacts/images/${imageId}`, imageData)
+}
+
+export const artifactImageDeleteService = (imageId) => {
+    return request.delete(`/artifacts/images/${imageId}`)
+}
+
+export const artifactImageSetCoverService = (imageId) => {
+    return request.post(`/artifacts/images/${imageId}/cover`)
+}

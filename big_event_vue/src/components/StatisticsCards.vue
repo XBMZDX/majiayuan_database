@@ -8,13 +8,13 @@ import { Document, Flag, Monitor } from '@element-plus/icons-vue'
 defineProps({
     artifactCount: { type: Number, default: 0 }, // 文物总数
     relicCount:    { type: Number, default: 0 }, // 遗迹总数
-    detectionCount:{ type: Number, default: 0 }, // 检测项目总数
+    detectionCount:{ type: Number, default: 0 }, // 已检测文物数
 })
 
 const cards = [
     { label: '文物总数', icon: Document, key: 'artifactCount' },
     { label: '遗迹总数', icon: Flag,     key: 'relicCount' },
-    { label: '检测项目总数', icon: Monitor, key: 'detectionCount' },
+    { label: '已检测文物数', icon: Monitor, key: 'detectionCount' },
 ]
 </script>
 

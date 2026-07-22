@@ -8,7 +8,18 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTokenStore } from '@/stores/token.js'
 import request from '@/utils/request.js'
 import StatisticsCards from '@/components/StatisticsCards.vue'
-import { artifactsListService, artifactsAddService, artifactsDeleteService, artifactsUpdateService, artifactsBatchImportService, artifactsBatchDeleteService } from '@/api/Artifacts.js'
+import {
+    artifactsListService,
+    artifactsAddService,
+    artifactsDeleteService,
+    artifactsUpdateService,
+    artifactsBatchImportService,
+    artifactsBatchDeleteService,
+    artifactImagesListService,
+    artifactImageUploadService,
+    artifactImageDeleteService,
+    artifactImageSetCoverService
+} from '@/api/Artifacts.js'
 
 const tokenStore = useTokenStore()
 
@@ -300,12 +311,17 @@ const detailEditMode = ref(false)           // 详情页编辑模式开关
 const detailMaterialCascader = ref([])      // 详情页材质级联选择值
 const detailCompletenessCascader = ref([]) // 详情页完整度级联选择值
 const detailBackup = ref({})                // 编辑前的原始数据备份
+const galleryVisible = ref(false)
+const imageLoading = ref(false)
+const imageUploading = ref(false)
+const artifactImages = ref([])
 
 // 打开详情（只读模式）
 const openDetail = (row) => {
     detailData.value = { ...row }
     detailEditMode.value = false
     visibleDetailDrawer.value = true
+    loadArtifactImages(row.id)
 }
 
 const getTestingStatusText = (row) => row?.testingStatusDisplay || row?.testingStatus || '无'
@@ -322,6 +338,70 @@ const getArtifactImage = (row) => {
     return String(value).split(',').map(item => item.trim()).filter(Boolean)[0] || ''
 }
 const clearDetailImage = () => { detailData.value.images = '' }
+const isCoverImage = (image) => image?.isCover === true || Number(image?.isCover) === 1 || String(image?.isCover) === 'true'
+const imagePreviewList = () => artifactImages.value.map(item => item.imageUrl).filter(Boolean)
+const getCoverImage = () => {
+    const cover = artifactImages.value.find(isCoverImage)
+    return cover?.imageUrl || artifactImages.value[0]?.imageUrl || getArtifactImage(detailData.value)
+}
+const loadArtifactImages = async (artifactId = detailData.value.id) => {
+    if (!artifactId) {
+        artifactImages.value = []
+        return
+    }
+    imageLoading.value = true
+    try {
+        const result = await artifactImagesListService(artifactId)
+        artifactImages.value = result.data || []
+    } catch (error) {
+        artifactImages.value = []
+        ElMessage.error('图片图库加载失败')
+    } finally {
+        imageLoading.value = false
+    }
+}
+const openGallery = () => {
+    galleryVisible.value = true
+    loadArtifactImages()
+}
+const uploadArtifactGalleryImage = async ({ file }) => {
+    if (!detailData.value.id) {
+        ElMessage.warning('请先打开文物详情')
+        return
+    }
+    imageUploading.value = true
+    try {
+        const formData = new FormData()
+        formData.append('file', file)
+        await artifactImageUploadService(detailData.value.id, formData)
+        await loadArtifactImages()
+        detailData.value.images = getCoverImage()
+        artifactsList()
+        ElMessage.success('图片上传成功')
+    } finally {
+        imageUploading.value = false
+    }
+}
+const setArtifactCover = async (image) => {
+    await artifactImageSetCoverService(image.id)
+    await loadArtifactImages()
+    detailData.value.images = image.imageUrl
+    artifactsList()
+    ElMessage.success('封面设置成功')
+}
+const deleteArtifactImage = (image) => {
+    ElMessageBox.confirm('确定删除这张图片吗？删除后不会在图库中显示。', '删除图片', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+    }).then(async () => {
+        await artifactImageDeleteService(image.id)
+        await loadArtifactImages()
+        detailData.value.images = getCoverImage()
+        artifactsList()
+        ElMessage.success('图片已删除')
+    }).catch(() => {})
+}
 
 // 进入编辑模式（备份当前数据，初始化级联选择器）
 const enterDetailEditMode = () => {
@@ -660,13 +740,19 @@ const handleImport = async () => {
                 <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="视觉特征" :span="2"><div v-html="detailData.artifactDescription || '—'" /></el-descriptions-item>
                 <el-descriptions-item label="文物图片" :span="2">
-                    <el-image
-                        v-if="getArtifactImage(detailData)"
-                        :src="getArtifactImage(detailData)"
-                        :preview-src-list="[getArtifactImage(detailData)]"
-                        fit="cover"
-                        class="detail-artifact-image" />
-                    <span v-else>—</span>
+                    <div class="artifact-image-summary">
+                        <el-image
+                            v-if="getCoverImage()"
+                            :src="getCoverImage()"
+                            :preview-src-list="imagePreviewList().length ? imagePreviewList() : [getCoverImage()]"
+                            fit="cover"
+                            class="detail-artifact-image" />
+                        <div class="artifact-image-info">
+                            <div class="artifact-image-title">{{ artifactImages.length ? `共 ${artifactImages.length} 张图片` : '暂无图库图片' }}</div>
+                            <div class="artifact-image-tip">可在详情中集中上传多张图片、设置封面或删除图片。</div>
+                            <el-button type="primary" size="small" @click="openGallery">管理图库</el-button>
+                        </div>
+                    </div>
                 </el-descriptions-item>
                 <el-descriptions-item label="创建时间">{{ detailData.createTime || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="更新时间">{{ detailData.updateTime || '—' }}</el-descriptions-item>
@@ -713,13 +799,17 @@ const handleImport = async () => {
                         <el-form-item label="定级情况"><el-input v-model="detailData.gradingStatus" /></el-form-item>
                         <el-form-item label="科技检测情况"><el-input v-model="detailData.testingStatus" /></el-form-item>
                         <el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item>
-                        <el-form-item label="图片">
-                            <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
-                                name="file" :headers="{ 'Authorization': tokenStore.token }" :on-success="(res) => { detailData.images = res.data }">
-                                <img v-if="detailData.images" :src="detailData.images" class="avatar" />
-                                <el-icon v-else class="avatar-uploader-icon"><Plus /></el-icon>
-                            </el-upload>
-                            <el-button v-if="detailData.images" type="danger" link style="margin-top:8px" @click="clearDetailImage">移除图片</el-button>
+                        <el-form-item label="图片图库">
+                            <div class="artifact-image-editor-entry">
+                                <el-image
+                                    v-if="getCoverImage()"
+                                    :src="getCoverImage()"
+                                    :preview-src-list="imagePreviewList().length ? imagePreviewList() : [getCoverImage()]"
+                                    fit="cover"
+                                    class="detail-artifact-image" />
+                                <el-empty v-else description="暂无图片" :image-size="70" />
+                                <el-button type="primary" plain @click="openGallery">管理图库</el-button>
+                            </div>
                         </el-form-item>
                     </el-col>
                 </el-row>
@@ -730,6 +820,47 @@ const handleImport = async () => {
             </div>
         </template>
     </el-drawer>
+
+    <el-dialog v-model="galleryVisible" title="文物详情图片图库" width="760px" append-to-body>
+        <div class="gallery-toolbar">
+            <div>
+                <div class="gallery-title">{{ detailData.newArtifactName || detailData.originalArtifactName || '当前文物' }}</div>
+                <div class="gallery-subtitle">{{ detailData.newArtifactCode || detailData.originalArtifactCode || '未填写编号' }}</div>
+            </div>
+            <el-upload
+                action="#"
+                multiple
+                :show-file-list="false"
+                :http-request="uploadArtifactGalleryImage"
+                accept="image/*">
+                <el-button type="primary" :loading="imageUploading">
+                    <el-icon><Plus /></el-icon>
+                    上传图片
+                </el-button>
+            </el-upload>
+        </div>
+
+        <el-empty v-if="!imageLoading && artifactImages.length === 0" description="暂无图片，点击右上角上传" />
+        <div v-else v-loading="imageLoading" class="gallery-grid">
+            <div v-for="image in artifactImages" :key="image.id" class="gallery-card">
+                <el-image
+                    :src="image.imageUrl"
+                    :preview-src-list="imagePreviewList()"
+                    fit="cover"
+                    class="gallery-image" />
+                <div class="gallery-card-body">
+                    <div class="gallery-name" :title="image.imageName">{{ image.imageName || '未命名图片' }}</div>
+                    <el-tag v-if="isCoverImage(image)" type="success" size="small">封面</el-tag>
+                    <span v-else class="gallery-time">{{ image.uploadTime || '' }}</span>
+                </div>
+                <div class="gallery-card-actions">
+                    <el-button v-if="!isCoverImage(image)" type="primary" link @click="setArtifactCover(image)">设为封面</el-button>
+                    <span v-else class="cover-placeholder">当前封面</span>
+                    <el-button type="danger" link @click="deleteArtifactImage(image)">删除</el-button>
+                </div>
+            </div>
+        </div>
+    </el-dialog>
 
     <!-- 导入文物抽屉 -->
     <el-drawer v-model="visibleImportDrawer" title="导入文物" direction="rtl" size="50%">
@@ -778,7 +909,23 @@ const handleImport = async () => {
         .el-icon.avatar-uploader-icon { font-size: 28px; color: #8c939d; width: 178px; height: 178px; text-align: center; }
     }
 }
-.detail-artifact-image { width: 220px; height: 160px; border-radius: 8px; border: 1px solid #ebeef5; }
+.artifact-image-summary { display: flex; align-items: center; gap: 16px; }
+.artifact-image-info { display: flex; flex-direction: column; gap: 8px; color: #606266; }
+.artifact-image-title { font-size: 15px; font-weight: 600; color: #303133; }
+.artifact-image-tip { font-size: 13px; color: #909399; }
+.artifact-image-editor-entry { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.detail-artifact-image { width: 220px; height: 160px; border-radius: 8px; border: 1px solid #ebeef5; background: #f5f7fa; }
+.gallery-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.gallery-title { font-size: 16px; font-weight: 600; color: #303133; }
+.gallery-subtitle { margin-top: 4px; font-size: 13px; color: #909399; }
+.gallery-grid { min-height: 180px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.gallery-card { border: 1px solid #ebeef5; border-radius: 10px; overflow: hidden; background: #fff; }
+.gallery-image { width: 100%; height: 140px; display: block; background: #f5f7fa; }
+.gallery-card-body { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 4px; }
+.gallery-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #303133; font-size: 13px; }
+.gallery-time { color: #909399; font-size: 12px; }
+.gallery-card-actions { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 10px; }
+.cover-placeholder { color: #67c23a; font-size: 13px; }
 .editor { width: 100%; :deep(.ql-editor) { min-height: 150px; } }
 .batch-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; margin-bottom: 10px; background: #fef0f0; border: 1px solid #fde2e2; border-radius: 4px; .batch-info { color: #e64242; font-size: 14px; } }
 </style>

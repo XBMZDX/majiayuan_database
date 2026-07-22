@@ -26,7 +26,7 @@ public class StatsController {
         map.put("artifactCount", statsMapper.countArtifacts());
         map.put("siteCount", statsMapper.countSites());
         map.put("relicCount", statsMapper.countRelics());
-        map.put("detectionCount", 0L); // 检测功能暂未实现
+        map.put("detectionCount", statsMapper.countDetectedArtifacts());
         return Result.success(map);
     }
 
@@ -43,5 +43,43 @@ public class StatsController {
 
         @Select("SELECT COUNT(DISTINCT excavation_relic) FROM artifacts WHERE excavation_relic IS NOT NULL AND excavation_relic != ''")
         Long countRelics();
+
+        @Select("""
+                SELECT COUNT(DISTINCT a.id)
+                FROM artifacts a
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM detection_analysis da
+                    WHERE (
+                        da.artifact_code IS NOT NULL
+                        AND TRIM(da.artifact_code) != ''
+                        AND (
+                            (
+                                a.new_artifact_code IS NOT NULL
+                                AND TRIM(a.new_artifact_code) != ''
+                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.new_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                            )
+                            OR
+                            (
+                                a.original_artifact_code IS NOT NULL
+                                AND TRIM(a.original_artifact_code) != ''
+                                AND REPLACE(REPLACE(REPLACE(REPLACE(TRIM(da.artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                                    = REPLACE(REPLACE(REPLACE(REPLACE(TRIM(a.original_artifact_code), '：', ':'), ' ', ''), '-', ''), '_', '')
+                            )
+                        )
+                    )
+                    OR (
+                        (da.artifact_code IS NULL OR TRIM(da.artifact_code) = '')
+                        AND da.artifact_name IS NOT NULL
+                        AND TRIM(da.artifact_name) != ''
+                        AND (
+                            TRIM(da.artifact_name) = TRIM(COALESCE(a.new_artifact_name, ''))
+                            OR TRIM(da.artifact_name) = TRIM(COALESCE(a.original_artifact_name, ''))
+                        )
+                    )
+                )
+                """)
+        Long countDetectedArtifacts();
     }
 }

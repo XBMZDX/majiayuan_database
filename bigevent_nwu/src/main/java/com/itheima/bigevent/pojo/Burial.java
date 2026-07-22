@@ -15,6 +15,9 @@ public class Burial {
     private String siteName;
     private String era;
     private String burialType;
+    private String orientation;
+    private String burialStyle;
+    private String robberHole;
     private LocalDate excavationDate;
     private Boolean hasCoffin;
     private Boolean hasChariot;
