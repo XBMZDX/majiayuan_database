@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { Edit, Delete, Document, PictureFilled, VideoCameraFilled, Headset, FolderOpened, Files } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request.js'
 import { useTokenStore } from '@/stores/token.js'
+import { buildSpacedTimelineLayout, getRawTimePercent } from '@/utils/timelineLayout.js'
 const token = computed(() => useTokenStore().token)
 
 // ========== 墓葬下拉选择 ==========
@@ -34,7 +36,14 @@ const timelineGroups = computed(() => {
         if (groups[e.flowId]) groups[e.flowId].events.push(evt)
         else { groups[e.flowId] = { label: '流程' + e.flowId, events: [evt] } }
     })
-    return Object.entries(groups).filter(([, g]) => g.events.length > 0).map(([id, g]) => ({ flowId: parseInt(id), ...g }))
+    return Object.entries(groups).filter(([, g]) => g.events.length > 0).map(([id, g]) => {
+        const layout = buildSpacedTimelineLayout(g.events, timeRange.value)
+        return {
+            flowId: parseInt(id),
+            label: g.label,
+            events: g.events.map((evt, idx) => ({ ...evt, visualPct: layout[idx]?.pct ?? getTimePercent(evt.date) }))
+        }
+    })
 })
 
 // 时间刻度：计算全局起止日期
@@ -51,28 +60,8 @@ const timeRange = computed(() => {
 })
 
 // 日期 → 时间轴百分比位置
-const getTimePercent = (dateStr) => {
-    if (!dateStr || !timeRange.value.days) return 0
-    const d = new Date(dateStr)
-    const min = new Date(timeRange.value.min)
-    return Math.max(0, Math.min(100, ((d - min) / 86400000) / timeRange.value.days * 100))
-}
-
-// 生成刻度标签（每 N 个月一个）
-const scaleTicks = computed(() => {
-    if (!timeRange.value.days) return []
-    const ticks = []
-    const min = new Date(timeRange.value.min)
-    const max = new Date(timeRange.value.max)
-    const months = Math.ceil(timeRange.value.days / 30)
-    const step = Math.max(1, Math.ceil(months / 10))
-    let cur = new Date(min.getFullYear(), min.getMonth(), 1)
-    while (cur <= max) {
-        ticks.push({ label: cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0'), pct: getTimePercent(cur.toISOString().slice(0, 10)) })
-        cur.setMonth(cur.getMonth() + step)
-    }
-    return ticks
-})
+const getTimePercent = (dateStr) => getRawTimePercent(dateStr, timeRange.value)
+const getTimelinePercent = (evt) => evt.visualPct ?? getTimePercent(evt.date)
 
 // ========== 流程树编辑弹窗 ==========
 const editDialogVisible = ref(false)
@@ -134,6 +123,45 @@ const fullArchiveVisible = ref(false)
 const showAddDialog = ref(false)
 const addType = ref('note')
 const addForm2 = ref({ date: '', content: '', fileUrl: '', fileName: '', artifactCode: '' })
+const uploadedImages = ref([])
+
+const resetAddForm = () => {
+    addForm2.value = { date: '', content: '', fileUrl: '', fileName: '', artifactCode: '' }
+    uploadedImages.value = []
+}
+
+const getMediaTypeByFileName = (fileName, fallback = 'file') => {
+    let mediaType = fallback
+    const ext = (fileName || '').split('.').pop()?.toLowerCase()
+    if (['pdf','doc','docx'].includes(ext)) mediaType = 'document'
+    else if (['xls','xlsx'].includes(ext)) mediaType = 'spreadsheet'
+    else if (['dwg'].includes(ext)) mediaType = 'dwg'
+    else if (['zip','rar'].includes(ext)) mediaType = 'archive'
+    return mediaType
+}
+
+const onAddUploadSuccess = (res, uploadFile) => {
+    const fileUrl = res?.data || ''
+    const fileName = uploadFile?.name || uploadFile?.raw?.name || addForm2.value.fileName || ''
+    if (addType.value === 'image') {
+        uploadedImages.value.push({ fileName, fileUrl })
+    } else {
+        addForm2.value.fileName = fileName
+        addForm2.value.fileUrl = fileUrl
+    }
+}
+
+const onAddUploadRemove = (uploadFile) => {
+    if (addType.value !== 'image') return
+    const fileUrl = uploadFile?.response?.data
+    const fileName = uploadFile?.name
+    uploadedImages.value = uploadedImages.value.filter(item => fileUrl ? item.fileUrl !== fileUrl : item.fileName !== fileName)
+}
+
+const beforeAddUpload = (file) => {
+    if (addType.value !== 'image') addForm2.value.fileName = file.name
+    return true
+}
 
 const submitAddContent = async () => {
     if (!selectedEvent.value) return
@@ -142,18 +170,20 @@ const submitAddContent = async () => {
         let content = addForm2.value.content
         if (addForm2.value.date) content = '[' + addForm2.value.date + '] ' + content
         await request.post('/admin/workflow/note', { timelineId: selectedEvent.value.id, noteType: '工作记录', content })
+    } else if (addType.value === 'image') {
+        if (!uploadedImages.value.length) return ElMessage.warning('请先选择并上传图片')
+        await Promise.all(uploadedImages.value.map(image => request.post('/admin/workflow/media', {
+            timelineId: selectedEvent.value.id,
+            mediaType: 'image',
+            fileName: image.fileName,
+            fileUrl: image.fileUrl
+        })))
     } else {
-        // 根据文件扩展名自动判断媒体类型
-        let mediaType = addType.value === 'image' ? 'image' : 'file'
-        const ext = (addForm2.value.fileName || '').split('.').pop()?.toLowerCase()
-        if (['pdf','doc','docx'].includes(ext)) mediaType = 'document'
-        else if (['xls','xlsx'].includes(ext)) mediaType = 'spreadsheet'
-        else if (['dwg'].includes(ext)) mediaType = 'dwg'
-        else if (['zip','rar'].includes(ext)) mediaType = 'archive'
+        const mediaType = getMediaTypeByFileName(addForm2.value.fileName, 'file')
         await request.post('/admin/workflow/media', { timelineId: selectedEvent.value.id, mediaType, fileName: addForm2.value.fileName, fileUrl: addForm2.value.fileUrl })
     }
     showAddDialog.value = false
-    addForm2.value = { date: '', content: '', fileUrl: '', fileName: '', artifactCode: '' }
+    resetAddForm()
     loadArchiveData(selectedEvent.value.id)
 }
 
@@ -162,12 +192,39 @@ const deleteMode = ref(false)
 const archiveNotes = ref([])
 const archiveImages = ref([])
 const archiveFiles = ref([])
+const archiveCounts = computed(() => ({
+    notes: archiveNotes.value.length,
+    images: archiveImages.value.length,
+    files: archiveFiles.value.length
+}))
+const latestArchiveTime = computed(() => {
+    const times = [...archiveNotes.value, ...archiveImages.value, ...archiveFiles.value]
+        .map(item => item?.updateTime || item?.createTime || item?.uploadTime)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b) - new Date(a))
+    return times[0] || '暂无更新'
+})
 
 const onEventClick = (event) => { selectedEvent.value = event; loadArchiveData(event.id) }
-const onEventDblClick = (event) => { selectedEvent.value = event; fullArchiveVisible = true; loadArchiveData(event.id) }
+const openFullArchive = (event = selectedEvent.value) => {
+    if (!event) return
+    selectedEvent.value = event
+    fullArchiveVisible.value = true
+    loadArchiveData(event.id)
+}
+const openAddContent = (type = 'note') => {
+    if (!selectedEvent.value) return
+    addType.value = type
+    resetAddForm()
+    showAddDialog.value = true
+}
+const onEventDblClick = (event) => openFullArchive(event)
 
 const loadArchiveData = async (timelineId) => {
     if (!timelineId) return
+    archiveNotes.value = []
+    archiveImages.value = []
+    archiveFiles.value = []
     const [notesRes, mediaRes] = await Promise.all([
         request.get('/admin/workflow/note/' + timelineId),
         request.get('/admin/workflow/media/' + timelineId)
@@ -265,9 +322,6 @@ const detailData = computed(() => {
         date: selectedEvent.value.date,
         flowId: selectedEvent.value.flowId,
         status: selectedEvent.value.status || 'pending',
-        artifacts: '陶器12件、青铜器3件',
-        photos: '现场照片45张、细节照片18张',
-        reports: '地层记录1份、遗迹图2张',
     }
 })
 </script>
@@ -316,25 +370,19 @@ const detailData = computed(() => {
                             <div class="track-label" :style="{color: getFlowColor(group.flowId)}">{{ group.label }}</div>
                             <div class="track-bar">
                                 <div class="track-line" :style="{borderColor: getFlowColor(group.flowId)}"></div>
-                                <div v-for="(evt, i) in group.events" :key="i" class="track-dot-wrap" :style="{left: getTimePercent(evt.date) + '%'}">
+                                <div v-for="(evt, i) in group.events" :key="i" class="track-dot-wrap" :style="{left: getTimelinePercent(evt) + '%'}">
                                     <div class="track-dot" :style="{background: getFlowColor(group.flowId)}" @click="onEventClick(evt)" @dblclick="onEventDblClick(evt)" :title="evt.title + ' (' + evt.date + ')'"></div>
+                                    <div class="track-date">{{ evt.date }}</div>
                                 </div>
                             </div>
                         </div>
                     </template>
                 </div>
-                <!-- 全局时间标尺 —— 卡片底部 -->
-                <div v-if="timelineGroups.length" class="time-ruler">
-                    <div v-for="(tick, i) in scaleTicks" :key="i" class="tick" :style="{left: tick.pct + '%'}">
-                        <div class="tick-line"></div>
-                        <div class="tick-label">{{ tick.label }}</div>
-                    </div>
-                </div>
             </el-card>
 
             <!-- 右侧：节点档案详情 -->
             <!-- 右侧：节点档案详情 -->
-            <el-card class="col-right" shadow="never" @dblclick="detailData && (fullArchiveVisible = true)">
+            <el-card class="col-right" shadow="never" @dblclick="openFullArchive()">
                 <template #header><span style="font-weight:600">节点档案详情</span></template>
                 <div v-if="detailData" class="detail-panel">
                     <!-- ① 基本信息 -->
@@ -350,9 +398,18 @@ const detailData = computed(() => {
                         </el-descriptions>
                     </div>
 
+                    <div class="detail-section">
+                        <div class="archive-summary-grid">
+                            <div class="summary-item"><b>{{ archiveCounts.notes }}</b><span>工作记录</span></div>
+                            <div class="summary-item"><b>{{ archiveCounts.images }}</b><span>图片</span></div>
+                            <div class="summary-item"><b>{{ archiveCounts.files }}</b><span>附件</span></div>
+                        </div>
+                        <div class="latest-time">最近更新：{{ latestArchiveTime }}</div>
+                    </div>
+
                     <!-- ② 最新工作记录 -->
                     <div class="detail-section">
-                        <div class="section-title">最新工作记录<span class="section-more">查看更多 →</span></div>
+                        <div class="section-title">最新工作记录<span class="section-more" @click="openFullArchive()">查看更多 →</span></div>
                         <div v-if="!archiveNotes.length" class="note-card"><div style="color:#ccc;text-align:center;font-size:12px">暂无记录</div></div>
                         <div v-for="n in archiveNotes.slice(0,3)" :key="n.id" class="note-card" style="margin-bottom:6px">
                             <div class="note-time">{{ getNoteTime(n) }}</div>
@@ -370,7 +427,12 @@ const detailData = computed(() => {
                     </div>
 
                     <!-- ④ 底部提示 -->
-                    <div class="detail-footer">双击查看完整档案</div>
+                    <div class="detail-actions">
+                        <el-button size="small" type="primary" plain @click.stop="openAddContent('note')">新增记录</el-button>
+                        <el-button size="small" type="success" plain @click.stop="openAddContent('image')">上传图片</el-button>
+                        <el-button size="small" plain @click.stop="openAddContent('file')">上传附件</el-button>
+                    </div>
+                    <div class="detail-footer" @click="openFullArchive()">查看完整档案</div>
                 </div>
                 <div v-else class="detail-empty">请选择时间轴节点查看档案</div>
             </el-card>
@@ -427,6 +489,18 @@ const detailData = computed(() => {
     <!-- 完整档案对话框 -->
     <el-dialog v-model="fullArchiveVisible" title="节点档案" width="80%" top="5vh" :close-on-click-modal="false" @opened="loadArchiveData(selectedEvent?.id)" @closed="deleteMode = false">
         <div v-if="detailData" class="archive-dialog">
+            <div class="archive-summary-cover">
+                <div>
+                    <div class="archive-kicker">节点档案</div>
+                    <h3>{{ detailData.title }}</h3>
+                    <p>{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }} · {{ selectedBurialName }} · {{ detailData.date }}</p>
+                </div>
+                <div class="archive-summary-stats">
+                    <div><b>{{ archiveCounts.notes }}</b><span>工作记录</span></div>
+                    <div><b>{{ archiveCounts.images }}</b><span>图片</span></div>
+                    <div><b>{{ archiveCounts.files }}</b><span>附件</span></div>
+                </div>
+            </div>
             <!-- 顶部固定信息 -->
             <el-descriptions :column="3" border size="small" class="archive-header">
                 <el-descriptions-item label="节点名称">{{ detailData.title }}</el-descriptions-item>
@@ -439,16 +513,26 @@ const detailData = computed(() => {
             </el-descriptions>
             <!-- 固定：工具栏 -->
             <div class="archive-toolbar">
-                <el-button size="small" type="primary" @click="showAddDialog = true">新增</el-button>
+                <el-button size="small" type="primary" @click="openAddContent('note')">新增</el-button>
                 <el-button size="small" :type="deleteMode ? 'danger' : 'default'" :icon="Delete" @click="deleteMode = !deleteMode">{{ deleteMode ? '取消' : '删除' }}</el-button>
             </div>
             <!-- Tabs 填充区 -->
             <el-tabs v-model="archiveTab" class="archive-tabs" @tab-change="deleteMode = false">
                 <el-tab-pane label="工作记录" name="notes">
                     <div class="tab-scroll">
-                        <div v-for="n in archiveNotes" :key="n.id" style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #F0F0F0">
-                            <div style="flex:1"><div style="font-size:12px;color:#999">{{ getNoteTime(n) }}</div><div style="font-weight:600;margin:4px 0">{{ n.noteType }}</div><div style="font-size:13px;color:#4E5969">{{ getNoteContent(n) }}</div></div>
-                            <el-button size="small" type="danger" circle @click="deleteNote(n.id)">✕</el-button>
+                        <el-empty v-if="!archiveNotes.length" description="暂无工作记录" :image-size="70" />
+                        <div v-else class="archive-note-timeline">
+                            <div v-for="n in archiveNotes" :key="n.id" class="archive-note-item">
+                                <div class="archive-note-dot"></div>
+                                <div class="archive-note-card">
+                                    <div class="archive-note-head">
+                                        <span>{{ getNoteTime(n) }}</span>
+                                        <el-tag size="small" type="info">{{ n.noteType || '工作记录' }}</el-tag>
+                                    </div>
+                                    <div class="archive-note-content">{{ getNoteContent(n) }}</div>
+                                </div>
+                                <el-button size="small" type="danger" circle @click="deleteNote(n.id)">✕</el-button>
+                            </div>
                         </div>
                     </div>
                 </el-tab-pane>
@@ -456,9 +540,13 @@ const detailData = computed(() => {
                     <div class="tab-scroll">
                     <div v-if="!archiveImages.length" style="text-align:center;padding:40px;color:#ccc">暂无图片</div>
                     <div v-else class="archive-image-grid">
-                        <div v-for="(img, idx) in archiveImages" :key="img.id" style="position:relative">
-                            <el-image :src="img.fileUrl" fit="cover" style="height:150px;border-radius:6px;width:100%" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
-                            <el-button v-if="deleteMode" size="small" type="danger" circle style="position:absolute;top:4px;right:4px;z-index:1" @click="deleteMedia(img.id)">✕</el-button>
+                        <div v-for="(img, idx) in archiveImages" :key="img.id" class="archive-image-card">
+                            <el-image :src="img.fileUrl" fit="cover" class="archive-image-preview" :preview-src-list="archiveImages.map(i=>i.fileUrl)" :initial-index="idx" />
+                            <div class="archive-image-meta">
+                                <b :title="img.fileName">{{ img.fileName || '未命名图片' }}</b>
+                                <span>{{ img.createTime || '-' }}</span>
+                            </div>
+                            <el-button v-if="deleteMode" size="small" type="danger" circle class="archive-image-delete" @click="deleteMedia(img.id)">✕</el-button>
                         </div>
                     </div>
                     </div>
@@ -476,9 +564,11 @@ const detailData = computed(() => {
                         </el-table-column>
                         <el-table-column prop="mediaType" label="文件类型" />
                         <el-table-column prop="createTime" label="上传时间" />
-                        <el-table-column v-if="deleteMode" label="操作">
+                        <el-table-column label="操作" width="180" fixed="right">
                             <template #default="{row}">
-                                <el-button size="small" type="danger" circle @click="deleteMedia(row.id)">✕</el-button>
+                                <el-button size="small" type="primary" link @click="openPreview(row)">预览</el-button>
+                                <el-button size="small" type="success" link @click="downloadFile(row)">下载</el-button>
+                                <el-button v-if="deleteMode" size="small" type="danger" link @click="deleteMedia(row.id)">删除</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
@@ -517,6 +607,9 @@ const detailData = computed(() => {
     </el-dialog>
     <!-- 新增内容对话框 -->
     <el-dialog v-model="showAddDialog" title="新增内容" width="500px">
+        <el-alert v-if="detailData" type="info" :closable="false" show-icon class="add-target-alert">
+            <template #title>新增内容将归入：{{ detailData.title }}（{{ treeData.find(t=>t.id===detailData.flowId)?.label || '-' }}）</template>
+        </el-alert>
         <el-radio-group v-model="addType" style="margin-bottom:12px">
             <el-radio-button value="note">工作记录</el-radio-button>
             <el-radio-button value="image">图片档案</el-radio-button>
@@ -529,11 +622,18 @@ const detailData = computed(() => {
         <template v-else-if="addType === 'image' || addType === 'file'">
             <el-upload class="upload-demo" action="/api/upload" name="file"
                 :headers="{ Authorization: token }" :show-file-list="true" :auto-upload="true"
-                :on-success="(res) => { addForm2.fileUrl = res.data }"
-                :before-upload="(file) => { addForm2.fileName = file.name; return true }"
+                :multiple="addType === 'image'"
+                :limit="addType === 'image' ? 50 : 1"
+                :on-success="onAddUploadSuccess"
+                :on-remove="onAddUploadRemove"
+                :before-upload="beforeAddUpload"
                 :accept="addType === 'image' ? 'image/*' : '.pdf,.doc,.docx,.xls,.xlsx,.dwg,.zip,.rar'">
-                <el-button type="primary">选择文件</el-button>
+                <el-button type="primary">{{ addType === 'image' ? '批量选择图片' : '选择文件' }}</el-button>
+                <template #tip>
+                    <div class="el-upload__tip">{{ addType === 'image' ? '可一次选择多张图片，上传完成后点击确定写入当前节点档案。' : '附件保持单文件上传。' }}</div>
+                </template>
             </el-upload>
+            <el-form-item v-if="addType === 'image' && uploadedImages.length" label="待保存图片"><span style="font-size:13px">已上传 {{ uploadedImages.length }} 张</span></el-form-item>
             <el-form-item v-if="addForm2.fileName" label="文件名"><span style="font-size:13px">{{ addForm2.fileName }}</span></el-form-item>
         </template>
         <template #footer><el-button @click="showAddDialog = false">取消</el-button><el-button type="primary" @click="submitAddContent">确定</el-button></template>
@@ -557,22 +657,23 @@ const detailData = computed(() => {
 .track-timeline { padding: 8px 0 16px 0; }
 .track-row { display: flex; align-items: center; margin-bottom: 6px; }
 .track-label { flex: 0 0 90px; font-size: 12px; font-weight: 600; text-align: right; padding-right: 8px; line-height: 1.3; margin-left: -8px; }
-.track-bar { flex: 1; position: relative; height: 48px; margin-left: -4px; }
-.track-line { position: absolute; top: 24px; left: 0; right: 0; border-top: 2px solid #E5E6EB; }
-.track-dot-wrap { position: absolute; top: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+.track-bar { flex: 1; position: relative; height: 58px; margin-left: -4px; }
+.track-line { position: absolute; top: 22px; left: 0; right: 0; border-top: 2px solid #E5E6EB; }
+.track-dot-wrap { position: absolute; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
 .track-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: transform .15s; border: 2px solid #fff; box-shadow: 0 0 0 2px currentColor; }
 .track-dot:hover { transform: scale(1.3); }
 .track-event-title { font-size: 10px; color: #1D2129; text-align: center; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
-.track-date { font-size: 10px; color: #999; margin-top: 2px; text-align: center; white-space: nowrap; }
-.time-ruler { position: relative; height: 24px; margin: 8px 16px 0 80px; padding-top: 4px; border-top: 1px solid #DCDFE6; }
-.tick { position: absolute; top: 0; transform: translateX(-50%); }
-.tick-line { width: 1px; height: 8px; background: #C0C4CC; margin: 0 auto; }
-.tick-label { font-size: 10px; color: #909399; margin-top: 2px; white-space: nowrap; }
+.track-date { max-width: 82px; font-size: 10px; color: #909399; margin-top: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-right { flex: 0 0 260px; display: flex; flex-direction: column; border: 1px solid #E5E6EB; border-radius: 8px; :deep(.el-card__body) { flex: 1; overflow-y: auto; } }
 .detail-panel { font-size: 13px; }
 .detail-section { margin-bottom: 16px; }
 .section-title { font-size: 13px; font-weight: 600; color: #1D2129; margin-bottom: 8px; display: flex; justify-content: space-between; }
 .section-more { font-size: 11px; color: #409EFF; cursor: pointer; font-weight: 400; }
+.archive-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.summary-item { background: #F7F8FA; border-radius: 6px; padding: 8px 4px; text-align: center; }
+.summary-item b { display: block; font-size: 18px; line-height: 1.2; color: #1D2129; }
+.summary-item span { display: block; margin-top: 3px; font-size: 11px; color: #909399; }
+.latest-time { margin-top: 8px; font-size: 12px; color: #909399; }
 .note-card { background: #F7F8FA; border-radius: 6px; padding: 10px 12px; }
 .note-time { font-size: 11px; color: #999; margin-bottom: 4px; }
 .note-content { font-size: 12px; color: #4E5969; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -583,11 +684,23 @@ const detailData = computed(() => {
 .sl2 { font-size: 11px; color: #999; margin-top: 2px; }
 .image-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .thumb-img { width: 100%; height: 60px; border-radius: 4px; object-fit: cover; cursor: pointer; }
-.detail-footer { font-size: 12px; color: #909399; text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #F0F0F0; }
+.detail-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+.detail-actions :deep(.el-button) { width: 100%; margin-left: 0; padding-left: 0; padding-right: 0; }
+.detail-footer { font-size: 12px; color: #409EFF; text-align: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid #F0F0F0; cursor: pointer; }
+.detail-footer:hover { opacity: .8; }
 .detail-empty { text-align: center; padding: 60px 0; color: #ccc; font-size: 13px; }
 
 /* ========== 完整档案对话框 ========== */
 .archive-dialog { height: 75vh; display: flex; flex-direction: column; overflow: hidden; }
+.archive-summary-cover { flex-shrink: 0; display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 14px 18px; margin-bottom: 12px; border-radius: 8px; background: linear-gradient(135deg, #1f4f43, #397467); color: #fff; }
+.archive-kicker { font-size: 11px; color: #b9d5cf; letter-spacing: .08em; }
+.archive-summary-cover h3 { margin: 3px 0; font-size: 20px; }
+.archive-summary-cover p { margin: 0; font-size: 12px; color: #d8ebe7; }
+.archive-summary-stats { display: flex; gap: 4px; }
+.archive-summary-stats div { min-width: 72px; padding: 6px 10px; text-align: center; border-left: 1px solid rgba(255,255,255,.16); }
+.archive-summary-stats b, .archive-summary-stats span { display: block; }
+.archive-summary-stats b { font-size: 20px; }
+.archive-summary-stats span { font-size: 10px; color: #cde2de; }
 .archive-header { flex-shrink: 0; margin-bottom: 12px; }
 .archive-toolbar { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .archive-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -596,7 +709,21 @@ const detailData = computed(() => {
 .archive-tabs :deep(.el-tab-pane) { height: 100%; }
 .tab-scroll { height: 100%; overflow-y: auto; }
 .table-wrapper { width: 100%; overflow-x: auto; }
-.archive-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.archive-note-timeline { position: relative; padding: 4px 0 8px 10px; }
+.archive-note-timeline::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 1px; background: #E5E6EB; }
+.archive-note-item { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 8px 0 12px; }
+.archive-note-dot { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 11px; border-radius: 50%; background: #409EFF; box-shadow: 0 0 0 3px #ECF5FF; flex-shrink: 0; }
+.archive-note-card { flex: 1; padding: 10px 12px; border: 1px solid #EBEEF5; border-radius: 8px; background: #fff; }
+.archive-note-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 12px; color: #909399; }
+.archive-note-content { font-size: 13px; color: #303133; line-height: 1.6; white-space: pre-wrap; }
+.archive-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.archive-image-card { position: relative; overflow: hidden; border: 1px solid #EBEEF5; border-radius: 8px; background: #fff; }
+.archive-image-preview { width: 100%; height: 150px; display: block; background: #F5F7FA; }
+.archive-image-meta { padding: 8px 10px; }
+.archive-image-meta b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #303133; }
+.archive-image-meta span { display: block; margin-top: 3px; font-size: 12px; color: #909399; }
+.archive-image-delete { position: absolute; top: 6px; right: 6px; z-index: 1; }
+.add-target-alert { margin-bottom: 12px; }
 .file-link { cursor: pointer; }
 .file-link:hover { opacity: 0.8; text-decoration: underline; }
 </style>
