@@ -37,6 +37,36 @@ public class DetectionController {
         return Result.success(overviewService.getOverview());
     }
 
+    /**
+     * 返回某件文物的全部检测记录、检测结果和已保存的图片，用于检测分析总览的只读详情。
+     */
+    @GetMapping("/artifact-detail")
+    public Result<Map<String, Object>> artifactDetail(
+        @RequestParam(value = "artifactCode", required = false, defaultValue = "") String artifactCode,
+        @RequestParam(value = "artifactName", required = false, defaultValue = "") String artifactName,
+        @RequestParam(value = "excavationRelic", required = false, defaultValue = "") String excavationRelic,
+        @RequestParam(value = "sampleMaterial", required = false, defaultValue = "") String sampleMaterial,
+        @RequestParam(value = "sourceType", required = false, defaultValue = "") String sourceType) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("artifactCode", text(artifactCode));
+        detail.put("artifactName", text(artifactName));
+        detail.put("excavationRelic", text(excavationRelic));
+        detail.put("sampleMaterial", text(sampleMaterial));
+        detail.put("sourceType", text(sourceType));
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (DetectionAnalysis detection : mapper.list()) {
+            if (!sameArtifact(artifactCode, artifactName, detection)) continue;
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("detection", detection);
+            record.put("analysisResults", resultMapper.listByDetectionId(detection.getId()));
+            record.put("experimentResults", expResultMapper.listByDetection(detection.getId()));
+            records.add(record);
+        }
+        detail.put("records", records);
+        return Result.success(detail);
+    }
+
     @PostMapping
     public Result add(@RequestBody DetectionAnalysis d) {
         normalizeArtifactCode(d);
@@ -170,6 +200,13 @@ public class DetectionController {
     public Result<Map<String, Object>> updateArtifactMethods(@RequestBody Map<String, Object> body) {
         String artifactCode = text(body.get("artifactCode"));
         String artifactName = text(body.get("artifactName"));
+        String samplePosition = text(body.get("samplePosition"));
+        String sampleStatus = text(body.get("sampleStatus"));
+        String manager = text(body.get("manager"));
+        String sampler = text(body.get("sampler"));
+        String notes = text(body.get("notes"));
+        boolean hasRecordFields = !samplePosition.isBlank() || !sampleStatus.isBlank()
+            || !manager.isBlank() || !sampler.isBlank() || !notes.isBlank();
         if (artifactCode.isBlank() && artifactName.isBlank()) return Result.error("文物编号和文物名称不能同时为空");
 
         Set<String> desiredMethods = methodSet(body.get("methods"));
@@ -193,14 +230,28 @@ public class DetectionController {
                 resultMapper.deleteByDetectionId(detection.getId());
                 expResultMapper.deleteByDetectionId(detection.getId());
                 mapper.delete(detection.getId());
-            } else if (!removedMethods.isEmpty()) {
-                for (String method : removedMethods) {
-                    resultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
-                    expResultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
+            } else {
+                boolean shouldUpdate = false;
+                if (!removedMethods.isEmpty()) {
+                    for (String method : removedMethods) {
+                        resultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
+                        expResultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
+                    }
+                    detection.setPurpose(String.join("/", remainingMethods));
+                    shouldUpdate = true;
                 }
-                detection.setPurpose(String.join("/", remainingMethods));
-                detection.setUpdateTime(LocalDateTime.now());
-                mapper.update(detection);
+                if (hasRecordFields) {
+                    if (!samplePosition.isBlank()) detection.setSamplePosition(samplePosition);
+                    if (!sampleStatus.isBlank()) detection.setSampleStatus(sampleStatus);
+                    if (!manager.isBlank()) detection.setManager(manager);
+                    if (!sampler.isBlank()) detection.setSampler(sampler);
+                    if (!notes.isBlank()) detection.setNotes(notes);
+                    shouldUpdate = true;
+                }
+                if (shouldUpdate) {
+                    detection.setUpdateTime(LocalDateTime.now());
+                    mapper.update(detection);
+                }
             }
             removedMethodCount += removedMethods.size();
         }
@@ -214,9 +265,13 @@ public class DetectionController {
             detection.setArtifactCode(artifactCode.replace('：', ':'));
             detection.setArtifactName(artifactName);
             detection.setExcavationRelic(text(body.get("excavationRelic")));
+            detection.setSamplePosition(samplePosition);
             detection.setSampleMaterial(text(body.get("sampleMaterial")));
-            detection.setSampleStatus("待检测");
+            detection.setSampleStatus(sampleStatus.isBlank() ? "待检测" : sampleStatus);
             detection.setPurpose(method);
+            detection.setManager(manager);
+            detection.setSampler(sampler);
+            detection.setNotes(notes);
             detection.setCreateTime(LocalDateTime.now());
             detection.setUpdateTime(LocalDateTime.now());
             mapper.insert(detection);
