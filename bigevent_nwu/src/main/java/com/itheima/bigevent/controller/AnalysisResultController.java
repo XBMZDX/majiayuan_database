@@ -3,6 +3,7 @@ package com.itheima.bigevent.controller;
 import com.itheima.bigevent.pojo.AnalysisResult;
 import com.itheima.bigevent.pojo.Result;
 import com.itheima.bigevent.mapper.AnalysisResultMapper;
+import com.itheima.bigevent.mapper.ArtifactImageMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -14,15 +15,21 @@ public class AnalysisResultController {
 
     @Autowired
     private AnalysisResultMapper mapper;
+    @Autowired
+    private ArtifactImageMapper artifactImageMapper;
 
     @GetMapping
     public Result<List<AnalysisResult>> list() {
-        return Result.success(mapper.list());
+        List<AnalysisResult> results = mapper.list();
+        results.forEach(this::applyArtifactCover);
+        return Result.success(results);
     }
 
     @GetMapping("/{id}")
     public Result<AnalysisResult> detail(@PathVariable Integer id) {
-        return Result.success(mapper.findById(id));
+        AnalysisResult result = mapper.findById(id);
+        applyArtifactCover(result);
+        return Result.success(result);
     }
 
     @PutMapping("/{id}")
@@ -33,5 +40,13 @@ public class AnalysisResultController {
     @DeleteMapping("/{id}")
     public Result delete(@PathVariable Integer id) {
         mapper.delete(id); return Result.success();
+    }
+
+    private void applyArtifactCover(AnalysisResult result) {
+        if (result == null) return;
+        if ((result.getArtifactCode() == null || result.getArtifactCode().isBlank())
+            && (result.getArtifactName() == null || result.getArtifactName().isBlank())) return;
+        String coverUrl = artifactImageMapper.findArtifactCoverByIdentity(result.getArtifactCode(), result.getArtifactName());
+        if (coverUrl != null && !coverUrl.isBlank()) result.setSamplePhoto(coverUrl);
     }
 }

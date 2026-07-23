@@ -22,4 +22,7 @@ public interface ExperimentResultMapper {
 
     @Delete("DELETE FROM experiment_results WHERE detection_id = #{detectionId} AND experiment_name = #{method}")
     void deleteByDetectionIdAndMethod(@Param("detectionId") Integer detectionId, @Param("method") String method);
+
+    @Update("UPDATE experiment_results SET detection_id=#{targetDetectionId} WHERE detection_id=#{sourceDetectionId} AND experiment_name=#{method}")
+    void moveToDetection(@Param("sourceDetectionId") Integer sourceDetectionId, @Param("targetDetectionId") Integer targetDetectionId, @Param("method") String method);
 }

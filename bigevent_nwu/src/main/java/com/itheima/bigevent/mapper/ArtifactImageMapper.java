@@ -48,4 +48,22 @@ public interface ArtifactImageMapper {
 
     @Update("UPDATE artifacts SET images=#{url},update_time=NOW() WHERE id=#{artifactId}")
     void updateArtifactCover(@Param("artifactId") Integer artifactId, @Param("url") String url);
+
+    @Select("<script>" +
+        "SELECT COALESCE((SELECT ai.image_url FROM artifact_image ai WHERE ai.artifact_id=a.id AND ai.deleted=0 ORDER BY ai.is_cover DESC,ai.sort_order ASC,ai.id ASC LIMIT 1),a.images) " +
+        "FROM artifacts a WHERE " +
+        "<choose>" +
+        "<when test='artifactCode != null and artifactCode != \"\"'>" +
+        "(CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(a.new_artifact_code,'')),'：',':'),' ',''),'-',''),'*','') USING utf8mb4) COLLATE utf8mb4_unicode_ci = " +
+        "CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(#{artifactCode}),'：',':'),' ',''),'-',''),'*','') USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
+        "OR CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(a.original_artifact_code,'')),'：',':'),' ',''),'-',''),'*','') USING utf8mb4) COLLATE utf8mb4_unicode_ci = " +
+        "CONVERT(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(#{artifactCode}),'：',':'),' ',''),'-',''),'*','') USING utf8mb4) COLLATE utf8mb4_unicode_ci)" +
+        "</when>" +
+        "<otherwise>" +
+        "(CONVERT(TRIM(COALESCE(a.new_artifact_name,'')) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(#{artifactName}) USING utf8mb4) COLLATE utf8mb4_unicode_ci " +
+        "OR CONVERT(TRIM(COALESCE(a.original_artifact_name,'')) USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT(TRIM(#{artifactName}) USING utf8mb4) COLLATE utf8mb4_unicode_ci)" +
+        "</otherwise>" +
+        "</choose> ORDER BY a.id DESC LIMIT 1" +
+        "</script>")
+    String findArtifactCoverByIdentity(@Param("artifactCode") String artifactCode, @Param("artifactName") String artifactName);
 }

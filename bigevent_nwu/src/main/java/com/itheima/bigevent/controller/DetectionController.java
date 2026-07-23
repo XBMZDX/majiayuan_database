@@ -9,6 +9,7 @@ import com.itheima.bigevent.mapper.ExperimentResultMapper;
 import com.itheima.bigevent.service.DetectionArtifactOverviewService;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.BeanUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
@@ -186,6 +187,37 @@ public class DetectionController {
         return Result.success();
     }
 
+    /**
+     * 仅更新一项检测方法自己的取样与人员信息，不重建或覆盖其他方法的检测结果。
+     * 历史上多个方法共用一条记录时，会在首次编辑时按方法拆分为独立记录。
+     */
+    @PatchMapping("/{id}/record-info")
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Map<String, Object>> updateRecordInfo(@PathVariable Integer id, @RequestBody Map<String, Object> body) {
+        DetectionAnalysis detection = mapper.findById(id);
+        if (detection == null) return Result.error("检测记录不存在");
+
+        String selectedMethod = text(body.get("method"));
+        Set<String> recordMethods = methodSet(detection.getPurpose());
+        if (selectedMethod.isBlank()) selectedMethod = recordMethods.stream().findFirst().orElse("");
+        if (!recordMethods.isEmpty() && !recordMethods.contains(selectedMethod)) return Result.error("检测方法与记录不匹配");
+
+        Integer targetId = splitRecordIfNeeded(detection, selectedMethod, recordMethods);
+        DetectionAnalysis target = mapper.findById(targetId);
+        target.setSamplePosition(text(body.get("samplePosition")));
+        target.setSampleStatus(text(body.get("sampleStatus")));
+        target.setManager(text(body.get("manager")));
+        target.setSampler(text(body.get("sampler")));
+        target.setNotes(text(body.get("notes")));
+        target.setUpdateTime(LocalDateTime.now());
+        mapper.update(target);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("detectionId", targetId);
+        result.put("method", selectedMethod);
+        return Result.success(result);
+    }
+
     @DeleteMapping("/{id}")
     public Result delete(@PathVariable Integer id) { mapper.delete(id); return Result.success(); }
 
@@ -285,10 +317,41 @@ public class DetectionController {
         return Result.success(result);
     }
 
+    private Integer splitRecordIfNeeded(DetectionAnalysis detection, String selectedMethod, Set<String> recordMethods) {
+        if (recordMethods.size() <= 1) return detection.getId();
+
+        List<String> methods = new ArrayList<>(recordMethods);
+        Map<String, Integer> methodDetectionIds = new LinkedHashMap<>();
+        String firstMethod = methods.get(0);
+        detection.setPurpose(firstMethod);
+        detection.setUpdateTime(LocalDateTime.now());
+        mapper.update(detection);
+        methodDetectionIds.put(firstMethod, detection.getId());
+
+        int nextSerial = mapper.list().size() + 1;
+        for (int index = 1; index < methods.size(); index++) {
+            String method = methods.get(index);
+            DetectionAnalysis copy = new DetectionAnalysis();
+            BeanUtils.copyProperties(detection, copy, "id", "serialNumber", "purpose", "createTime", "updateTime");
+            copy.setSerialNumber(String.valueOf(nextSerial++));
+            copy.setPurpose(method);
+            copy.setCreateTime(LocalDateTime.now());
+            copy.setUpdateTime(LocalDateTime.now());
+            mapper.insert(copy);
+            resultMapper.moveToDetection(detection.getId(), copy.getId(), method);
+            expResultMapper.moveToDetection(detection.getId(), copy.getId(), method);
+            methodDetectionIds.put(method, copy.getId());
+        }
+        return methodDetectionIds.getOrDefault(selectedMethod, detection.getId());
+    }
+
     @Mapper
     public interface DetectionMapper {
         @Select("SELECT * FROM detection_analysis ORDER BY CAST(serial_number AS UNSIGNED) ASC")
         List<DetectionAnalysis> list();
+
+        @Select("SELECT * FROM detection_analysis WHERE id=#{id}")
+        DetectionAnalysis findById(Integer id);
 
         @Insert("INSERT INTO detection_analysis (serial_number,artifact_code,artifact_name,excavation_relic,sample_position,sample_material,sample_status,sample_quantity,sample_method,purpose,instrument_name,instrument_model,test_params,storage_location,departure_time,destination,sample_photo,analysis_data,analysis_report,manager,sampler,notes,create_time,update_time) VALUES (#{serialNumber},#{artifactCode},#{artifactName},#{excavationRelic},#{samplePosition},#{sampleMaterial},#{sampleStatus},#{sampleQuantity},#{sampleMethod},#{purpose},#{instrumentName},#{instrumentModel},#{testParams},#{storageLocation},#{departureTime},#{destination},#{samplePhoto},#{analysisData},#{analysisReport},#{manager},#{sampler},#{notes},#{createTime},#{updateTime})")
         @Options(useGeneratedKeys = true, keyProperty = "id")

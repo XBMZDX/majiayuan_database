@@ -99,7 +99,7 @@ public class DetectionArtifactOverviewService {
         }
 
         List<Map<String, Object>> items = new ArrayList<>();
-        int notDetected = 0, inProgress = 0, partial = 0, complete = 0, noResult = 0;
+        int notDetected = 0, inProgress = 0, partial = 0, complete = 0;
         for (ArtifactSummary summary : summaries) {
             summary.finish();
             items.add(summary.toMap());
@@ -108,7 +108,7 @@ public class DetectionArtifactOverviewService {
                 case "检测进行中" -> inProgress++;
                 case "已有部分结果" -> partial++;
                 case "结果完整" -> complete++;
-                default -> noResult++;
+                default -> { }
             }
         }
 
@@ -118,7 +118,6 @@ public class DetectionArtifactOverviewService {
         stats.put("inProgress", inProgress);
         stats.put("partial", partial);
         stats.put("complete", complete);
-        stats.put("noResult", noResult);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("items", items);
@@ -187,21 +186,16 @@ public class DetectionArtifactOverviewService {
         private void finish() {
             if (methods.isEmpty()) return;
             Collection<MethodSummary> values = methods.values();
-            boolean anyInProgress = values.stream().anyMatch(MethodSummary::isInProgress);
-            boolean allComplete = values.stream().allMatch(MethodSummary::isComplete);
-            boolean anyPartial = values.stream().anyMatch(MethodSummary::hasAnyResult);
-            if (anyInProgress) {
+            long recordedResultCount = values.stream().filter(MethodSummary::hasRecordedResult).count();
+            if (recordedResultCount == 0) {
                 resultStatus = "检测进行中";
-                resultCompleteness = "检测尚未全部完成";
-            } else if (allComplete) {
+                resultCompleteness = "已建立检测记录，尚未录入检测结果";
+            } else if (recordedResultCount == values.size()) {
                 resultStatus = "结果完整";
-                resultCompleteness = "全部方法均已完成并填写结果";
-            } else if (anyPartial) {
-                resultStatus = "已有部分结果";
-                resultCompleteness = "部分方法已有结果或附件";
+                resultCompleteness = "全部 " + values.size() + " 项检测实验均已录入结果";
             } else {
-                resultStatus = "无结果";
-                resultCompleteness = "已建立检测记录，尚未录入结果";
+                resultStatus = "已有部分结果";
+                resultCompleteness = "已录入 " + recordedResultCount + "/" + values.size() + " 项检测实验结果";
             }
         }
 
@@ -247,9 +241,7 @@ public class DetectionArtifactOverviewService {
             status = preferredStatus(status, snapshot.status, sampleStatus);
         }
 
-        private boolean isInProgress() { return "检测中".equals(status); }
-        private boolean hasAnyResult() { return hasResultData || hasImages || hasAttachments || hasNotes || "已完成".equals(status); }
-        private boolean isComplete() { return "已完成".equals(status) && hasResultData && hasNotes && (hasImages || hasAttachments); }
+        private boolean hasRecordedResult() { return hasResultData || hasImages || hasAttachments || hasNotes; }
 
         private Map<String, Object> toMap() {
             Map<String, Object> method = new LinkedHashMap<>();
@@ -257,7 +249,8 @@ public class DetectionArtifactOverviewService {
             method.put("analysisResultId", analysisResultId);
             method.put("status", status.isBlank() ? "待检测" : status);
             method.put("detected", detected);
-            method.put("complete", isComplete());
+            method.put("hasResult", hasRecordedResult());
+            method.put("complete", hasRecordedResult());
             return method;
         }
     }

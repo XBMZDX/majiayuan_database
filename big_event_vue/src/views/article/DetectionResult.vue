@@ -8,6 +8,16 @@ import request from '@/utils/request.js'
 const router = useRouter()
 
 const list = ref([])
+const displayPhoto = item => {
+    const value = String(item?.samplePhoto || '').trim()
+    if (!value) return ''
+    try {
+        const parsed = JSON.parse(value)
+        if (Array.isArray(parsed)) return String(parsed[0]?.url || parsed[0]?.imageUrl || parsed[0] || '')
+        if (parsed && typeof parsed === 'object') return String(parsed.url || parsed.imageUrl || '')
+    } catch (error) { /* 兼容直接保存的 URL */ }
+    return value.split(/[\n,;]/).map(item => item.trim()).filter(Boolean)[0] || ''
+}
 
 const openDetail = (item) => {
     sessionStorage.setItem('expIds', JSON.stringify(list.value.map(i => i.id)))
@@ -54,9 +64,9 @@ onMounted(fetchList)
 
                 <!-- 样品照片 -->
                 <div class="card-image">
-                    <el-image v-if="item.samplePhoto" :src="item.samplePhoto" fit="cover"
-                              style="width:100%;height:180px;border-radius:6px" :preview-src-list="[item.samplePhoto]" />
-                    <div v-else class="card-image-empty">暂无样品照片</div>
+                    <el-image v-if="displayPhoto(item)" :src="displayPhoto(item)" fit="cover"
+                              style="width:100%;height:180px;border-radius:6px" :preview-src-list="[displayPhoto(item)]" />
+                    <div v-else class="card-image-empty">暂无文物封面照片</div>
                 </div>
 
                 <el-divider style="margin:10px 0" />

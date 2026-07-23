@@ -13,13 +13,16 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const addVisible = ref(false)
 const addForm = ref(defaultAddForm())
-const methodSaving = ref(false)
-const methodEditorForm = ref({ artifactCode: '', artifactName: '', excavationRelic: '', sampleMaterial: '', samplePosition: '', sampleStatus: '', manager: '', sampler: '', notes: '', methods: [], originalMethods: [] })
 const detailVisible = ref(false)
 const detailLoading = ref(false)
-const detailEditMode = ref(false)
 const detailSource = ref({})
 const artifactDetail = ref({ records: [] })
+const recordEditingId = ref(null)
+const recordSaving = ref(false)
+const recordEditor = ref({ id: null, method: '', methodOptions: [], samplePosition: '', sampleStatus: '', manager: '', sampler: '', notes: '' })
+const methodManaging = ref(false)
+const methodSaving = ref(false)
+const methodManager = ref({ methods: [], originalMethods: [] })
 // 默认聚焦已有检测记录的文物；需要补检时可切换为全部或仅未检测。
 const filters = ref({ detectionScope: 'detected', sourceType: '', material: '', method: '', resultStatus: '', keyword: '' })
 
@@ -68,16 +71,15 @@ const resetFilters = () => {
     pageNum.value = 1
 }
 const handleFilter = () => { pageNum.value = 1 }
-const statusType = status => ({ '未检测': 'info', '检测进行中': 'warning', '已有部分结果': 'primary', '结果完整': 'success', '无结果': 'danger' })[status] || 'info'
+const statusType = status => ({ '未检测': 'info', '检测进行中': 'warning', '已有部分结果': 'primary', '结果完整': 'success' })[status] || 'info'
 const methodStatus = (item, methodName) => item.methods?.find(method => method.name === methodName)
 const matrixCellType = method => {
     if (!method) return 'info'
     if (method.complete) return 'success'
-    if (method.status === '检测中') return 'warning'
-    if (method.status === '已完成') return 'primary'
-    return 'info'
+    if (method.hasResult) return 'primary'
+    return 'warning'
 }
-const matrixCellText = method => !method ? '未做' : method.complete ? '完成' : method.status === '检测中' ? '进行中' : method.status === '已完成' ? '待补充' : '无结果'
+const matrixCellText = method => !method ? '未做' : method.complete ? '已录入' : method.hasResult ? '已录入' : '待录入'
 const openResult = method => {
     if (!method?.analysisResultId) {
         ElMessage.warning('该检测方法尚未生成可查看的分析结果')
@@ -138,7 +140,8 @@ const loadArtifactDetail = async () => {
 }
 const openArtifactDetail = async row => {
     detailSource.value = row
-    detailEditMode.value = false
+    recordEditingId.value = null
+    methodManaging.value = false
     detailVisible.value = true
     await loadArtifactDetail()
 }
@@ -155,62 +158,86 @@ const submitAdd = async () => {
     const data = {
         ...addForm.value,
         artifactCode: addForm.value.artifactCode.trim().replace(/：/g, ':'),
-        purpose: addForm.value.purposeList.join('/'),
-        serialNumber: String((items.value.length || 0) + 1),
         sampleQuantity: '', sampleMethod: '', instrumentName: '', instrumentModel: '', testParams: '',
         storageLocation: '', departureTime: '', destination: '', samplePhoto: '', analysisData: '', analysisReport: ''
     }
     delete data.purposeList
-    await request.post('/admin/detection', data)
+    await Promise.all(addForm.value.purposeList.map((method, index) => request.post('/admin/detection', {
+        ...data,
+        purpose: method,
+        serialNumber: String((items.value.length || 0) + index + 1)
+    })))
     ElMessage.success('检测记录已新增')
     addVisible.value = false
     await fetchOverview()
 }
 
-const startArtifactDetailEdit = () => {
-    const currentMethods = [...new Set((artifactDetail.value.records || [])
-        .flatMap(record => String(record.detection?.purpose || '').split('/'))
-        .map(item => item.trim()).filter(Boolean))]
-    const reference = artifactDetail.value.records?.[0]?.detection || {}
-    methodEditorForm.value = {
-        artifactCode: artifactDetail.value.artifactCode || '',
-        artifactName: artifactDetail.value.artifactName || '',
-        excavationRelic: artifactDetail.value.excavationRelic || '',
-        sampleMaterial: artifactDetail.value.sampleMaterial || '',
-        samplePosition: reference.samplePosition || '',
-        sampleStatus: reference.sampleStatus || '',
-        manager: reference.manager || '',
-        sampler: reference.sampler || '',
-        notes: reference.notes || '',
-        methods: [...currentMethods],
-        originalMethods: [...currentMethods]
+const methodOptionsOf = record => [...new Set(String(record.detection?.purpose || '').split('/').map(item => item.trim()).filter(Boolean))]
+const startRecordEdit = record => {
+    const detection = record.detection || {}
+    const methodOptions = methodOptionsOf(record)
+    recordEditor.value = {
+        id: detection.id,
+        method: methodOptions[0] || '',
+        methodOptions,
+        samplePosition: detection.samplePosition || '',
+        sampleStatus: detection.sampleStatus || '',
+        manager: detection.manager || '',
+        sampler: detection.sampler || '',
+        notes: detection.notes || ''
     }
-    detailEditMode.value = true
+    recordEditingId.value = detection.id
 }
-const saveArtifactMethods = async () => {
-    const methodsToSave = [...new Set(methodEditorForm.value.methods.map(item => String(item || '').trim()).filter(Boolean))]
-    const hasRemovedMethod = methodEditorForm.value.originalMethods.some(item => !methodsToSave.includes(item))
-    if (hasRemovedMethod) {
+const saveRecordInfo = async () => {
+    recordSaving.value = true
+    try {
+        await request.patch(`/admin/detection/${recordEditor.value.id}/record-info`, {
+            method: recordEditor.value.method,
+            samplePosition: recordEditor.value.samplePosition,
+            sampleStatus: recordEditor.value.sampleStatus,
+            manager: recordEditor.value.manager,
+            sampler: recordEditor.value.sampler,
+            notes: recordEditor.value.notes
+        })
+        ElMessage.success('该检测记录已保存')
+        recordEditingId.value = null
+        await fetchOverview()
+        await loadArtifactDetail()
+    } finally {
+        recordSaving.value = false
+    }
+}
+const detailMethodNames = () => [...new Set((artifactDetail.value.records || [])
+    .flatMap(record => String(record.detection?.purpose || '').split('/'))
+    .map(item => item.trim()).filter(Boolean))]
+const startMethodManage = () => {
+    const current = detailMethodNames()
+    methodManager.value = { methods: [...current], originalMethods: [...current] }
+    recordEditingId.value = null
+    methodManaging.value = true
+}
+const saveDetailMethods = async () => {
+    const selected = [...new Set(methodManager.value.methods.map(item => String(item || '').trim()).filter(Boolean))]
+    const hasRemoved = methodManager.value.originalMethods.some(method => !selected.includes(method))
+    if (hasRemoved) {
         try {
-            await ElMessageBox.confirm('移除检测方法会同时删除该方法对应的分析结果和实验结果，是否继续？', '确认移除检测方法', { type: 'warning' })
+            const message = selected.length
+                ? '移除检测方法会删除该方法对应的检测记录、分析结果和实验结果，是否继续？'
+                : '清空检测方法会删除该文物的全部检测记录、分析结果和实验结果，是否继续？'
+            await ElMessageBox.confirm(message, '确认删除检测方法', { type: 'warning' })
         } catch (error) { return }
     }
     methodSaving.value = true
     try {
         const response = await request.put('/admin/detection/artifact-methods', {
-            artifactCode: methodEditorForm.value.artifactCode,
-            artifactName: methodEditorForm.value.artifactName,
-            excavationRelic: methodEditorForm.value.excavationRelic,
-            sampleMaterial: methodEditorForm.value.sampleMaterial,
-            samplePosition: methodEditorForm.value.samplePosition,
-            sampleStatus: methodEditorForm.value.sampleStatus,
-            manager: methodEditorForm.value.manager,
-            sampler: methodEditorForm.value.sampler,
-            notes: methodEditorForm.value.notes,
-            methods: methodsToSave
+            artifactCode: artifactDetail.value.artifactCode,
+            artifactName: artifactDetail.value.artifactName,
+            excavationRelic: artifactDetail.value.excavationRelic,
+            sampleMaterial: artifactDetail.value.sampleMaterial,
+            methods: selected
         })
-        ElMessage.success(`检测记录已保存：新增 ${response.data?.addedMethodCount || 0} 项，移除 ${response.data?.removedMethodCount || 0} 项`)
-        detailEditMode.value = false
+        ElMessage.success(`检测方法已保存：新增 ${response.data?.addedMethodCount || 0} 项，删除 ${response.data?.removedMethodCount || 0} 项`)
+        methodManaging.value = false
         await fetchOverview()
         await loadArtifactDetail()
     } finally {
@@ -242,7 +269,6 @@ onMounted(fetchOverview)
             <el-card shadow="never" class="in-progress"><strong>{{ stats.inProgress || 0 }}</strong><span>检测进行中</span></el-card>
             <el-card shadow="never" class="partial"><strong>{{ stats.partial || 0 }}</strong><span>已有部分结果</span></el-card>
             <el-card shadow="never" class="complete"><strong>{{ stats.complete || 0 }}</strong><span>结果完整</span></el-card>
-            <el-card shadow="never" class="no-result"><strong>{{ stats.noResult || 0 }}</strong><span>无结果</span></el-card>
         </section>
 
         <el-card shadow="never" class="filter-card">
@@ -270,7 +296,6 @@ onMounted(fetchOverview)
                     <el-option label="检测进行中" value="检测进行中" />
                     <el-option label="已有部分结果" value="已有部分结果" />
                     <el-option label="结果完整" value="结果完整" />
-                    <el-option label="无结果" value="无结果" />
                 </el-select>
                 <el-button @click="resetFilters">重置</el-button>
             </div>
@@ -343,22 +368,18 @@ onMounted(fetchOverview)
         <el-dialog v-model="detailVisible" title="文物检测详情" width="min(980px, 94vw)" destroy-on-close>
             <div v-loading="detailLoading" class="artifact-detail">
                 <div class="detail-toolbar">
-                    <span>{{ detailEditMode ? '编辑检测记录' : '检测记录详情' }}</span>
-                    <el-button v-if="!detailEditMode" type="primary" @click="startArtifactDetailEdit">编辑检测记录</el-button>
+                    <span>检测记录详情</span>
+                    <el-button v-if="!methodManaging" type="primary" @click="startMethodManage">新增/删除检测方法</el-button>
                 </div>
-                <el-form v-if="detailEditMode" :model="methodEditorForm" label-width="105px">
-                    <el-row :gutter="16">
-                        <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="methodEditorForm.artifactCode" disabled /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="methodEditorForm.artifactName" disabled /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="出土来源"><el-input v-model="methodEditorForm.excavationRelic" disabled /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="methodEditorForm.sampleMaterial" disabled /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="methodEditorForm.samplePosition" /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="样品状态"><el-select v-model="methodEditorForm.sampleStatus" placeholder="请选择样品状态" clearable style="width:100%"><el-option label="待检测" value="待检测" /><el-option label="检测中" value="检测中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item></el-col>
-                        <el-col :span="24"><el-form-item label="检测方法" required><el-select v-model="methodEditorForm.methods" multiple filterable allow-create default-first-option placeholder="选择或输入检测方法" style="width:100%"><el-option v-for="item in methods" :key="item" :label="item" :value="item" /></el-select><div class="method-editor-tip">已有方法和结果会保留；新增方法会创建新的检测记录，移除方法会删除其对应的分析结果和实验结果。</div></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="管理人"><el-input v-model="methodEditorForm.manager" /></el-form-item></el-col>
-                        <el-col :span="12"><el-form-item label="取样人"><el-input v-model="methodEditorForm.sampler" /></el-form-item></el-col>
-                        <el-col :span="24"><el-form-item label="备注"><el-input v-model="methodEditorForm.notes" type="textarea" :rows="2" /></el-form-item></el-col>
-                    </el-row>
+                <el-form v-if="methodManaging" :model="methodManager" label-width="105px" class="method-manage-form">
+                    <el-form-item label="文物编号"><el-input :model-value="artifactDetail.artifactCode || '-'" disabled /></el-form-item>
+                    <el-form-item label="文物名称"><el-input :model-value="artifactDetail.artifactName || '-'" disabled /></el-form-item>
+                    <el-form-item label="检测方法" required>
+                        <el-select v-model="methodManager.methods" multiple filterable allow-create default-first-option placeholder="选择或输入检测方法" style="width:100%">
+                            <el-option v-for="item in methods" :key="item" :label="item" :value="item" />
+                        </el-select>
+                        <div class="method-manage-tip">新增方法将创建一条独立检测记录；移除方法会删除该方法的记录及对应分析、实验结果。每条方法记录可再单独编辑取样与人员信息。</div>
+                    </el-form-item>
                 </el-form>
                 <template v-else>
                 <el-descriptions :column="2" border class="detail-summary">
@@ -374,7 +395,20 @@ onMounted(fetchOverview)
                         <template #title>
                             <span class="record-title">{{ record.detection?.purpose || '未填写检测方法' }}</span>
                             <el-tag size="small" :type="record.detection?.sampleStatus === '已完成' ? 'success' : record.detection?.sampleStatus === '检测中' ? 'warning' : 'info'">{{ record.detection?.sampleStatus || '待检测' }}</el-tag>
+                            <el-button type="primary" link size="small" @click.stop="startRecordEdit(record)">编辑</el-button>
                         </template>
+                        <el-form v-if="recordEditingId === record.detection?.id" :model="recordEditor" label-width="92px" class="record-edit-form">
+                            <el-row :gutter="16">
+                                <el-col :span="12"><el-form-item label="检测方法"><el-select v-model="recordEditor.method" :disabled="recordEditor.methodOptions.length <= 1" style="width:100%"><el-option v-for="method in recordEditor.methodOptions" :key="method" :label="method" :value="method" /></el-select></el-form-item></el-col>
+                                <el-col :span="12"><el-form-item label="样品状态"><el-select v-model="recordEditor.sampleStatus" clearable placeholder="请选择" style="width:100%"><el-option label="待检测" value="待检测" /><el-option label="检测中" value="检测中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item></el-col>
+                                <el-col :span="12"><el-form-item label="取样部位"><el-input v-model="recordEditor.samplePosition" /></el-form-item></el-col>
+                                <el-col :span="12"><el-form-item label="管理人"><el-input v-model="recordEditor.manager" /></el-form-item></el-col>
+                                <el-col :span="12"><el-form-item label="取样人"><el-input v-model="recordEditor.sampler" /></el-form-item></el-col>
+                                <el-col :span="24"><el-form-item label="备注"><el-input v-model="recordEditor.notes" type="textarea" :rows="2" /></el-form-item></el-col>
+                            </el-row>
+                            <div class="record-edit-actions"><el-button @click="recordEditingId = null">取消</el-button><el-button type="primary" :loading="recordSaving" @click="saveRecordInfo">保存本条记录</el-button></div>
+                        </el-form>
+                        <template v-else>
                         <el-descriptions :column="2" border size="small">
                             <el-descriptions-item label="取样部位">{{ record.detection?.samplePosition || '-' }}</el-descriptions-item>
                             <el-descriptions-item label="样品状态">{{ record.detection?.sampleStatus || '-' }}</el-descriptions-item>
@@ -403,14 +437,15 @@ onMounted(fetchOverview)
                             </el-table>
                             <el-empty v-else description="暂无检测结果" :image-size="48" />
                         </section>
+                        </template>
                     </el-collapse-item>
                 </el-collapse>
                 </template>
             </div>
             <template #footer>
-                <el-button v-if="detailEditMode" @click="detailEditMode = false">取消编辑</el-button>
+                <el-button v-if="methodManaging" @click="methodManaging = false">取消</el-button>
                 <el-button v-else @click="detailVisible = false">关闭</el-button>
-                <el-button v-if="detailEditMode" type="primary" :loading="methodSaving" @click="saveArtifactMethods">保存检测记录</el-button>
+                <el-button v-if="methodManaging" type="primary" :loading="methodSaving" @click="saveDetailMethods">保存检测方法</el-button>
             </template>
         </el-dialog>
     </div>
@@ -422,19 +457,18 @@ onMounted(fetchOverview)
 .page-heading { margin-bottom: 18px; }
 .page-heading h2 { margin: 0 0 7px; font-size: 21px; color: #1d2129; }
 .page-heading p { margin: 0; font-size: 14px; color: #86909c; }
-.status-cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.status-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .status-cards :deep(.el-card__body) { display: grid; gap: 5px; padding: 15px 16px; }
 .status-cards strong { font-size: 24px; color: #1d2129; }
 .status-cards span { font-size: 12px; color: #86909c; }
-.status-cards .in-progress strong { color: #d97706; }.status-cards .partial strong { color: #2563eb; }.status-cards .complete strong { color: #059669; }.status-cards .no-result strong { color: #dc2626; }
+.status-cards .in-progress strong { color: #d97706; }.status-cards .partial strong { color: #2563eb; }.status-cards .complete strong { color: #059669; }
 .filter-card, .content-card { border-color: #e5e6eb; margin-bottom: 16px; }
 .filter-bar { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) minmax(220px, 1.3fr) auto; gap: 11px; }
 .content-header { align-items: center; font-weight: 600; }
 .relic-name { display: block; margin-top: 5px; color: #4e5969; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .method-tags { display: flex; flex-wrap: wrap; gap: 6px; }.method-tag, .matrix-cell { cursor: pointer; }.empty-value { color: #c9cdd4; }
 .completeness-text { margin-top: 5px; color: #86909c; font-size: 12px; line-height: 1.35; }.pagination { margin-top: 16px; justify-content: flex-end; }
-.method-editor-tip { margin-top: 7px; color: #86909c; font-size: 12px; line-height: 1.5; }
-.artifact-detail { min-height: 180px; }.detail-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; color: #1d2129; font-weight: 600; }.detail-summary { margin-bottom: 16px; }.detail-records :deep(.el-collapse-item__header) { gap: 10px; }.record-title { font-weight: 600; color: #1d2129; }.detail-section { margin-top: 18px; }.detail-section h4 { margin: 0 0 10px; color: #303133; font-size: 14px; }.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }.photo-grid :deep(.el-image) { width: 100%; height: 112px; border-radius: 6px; border: 1px solid #e5e6eb; background: #f7f8fa; }
+.artifact-detail { min-height: 180px; }.detail-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; color: #1d2129; font-weight: 600; }.method-manage-form { max-width: 720px; padding: 18px 16px 4px; background: #f7f9fc; border: 1px solid #e5e6eb; border-radius: 6px; }.method-manage-tip { margin-top: 7px; color: #86909c; font-size: 12px; line-height: 1.55; }.detail-summary { margin-bottom: 16px; }.detail-records :deep(.el-collapse-item__header) { gap: 10px; }.record-title { font-weight: 600; color: #1d2129; }.record-edit-form { padding: 14px 12px 2px; background: #f7f9fc; border: 1px solid #e5e6eb; border-radius: 6px; }.record-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }.detail-section { margin-top: 18px; }.detail-section h4 { margin: 0 0 10px; color: #303133; font-size: 14px; }.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }.photo-grid :deep(.el-image) { width: 100%; height: 112px; border-radius: 6px; border: 1px solid #e5e6eb; background: #f7f8fa; }
 .matrix-wrap { overflow: auto; }.matrix-legend { display: flex; gap: 8px; margin-bottom: 12px; }.matrix-artifact-name { display: block; margin-top: 4px; color: #86909c; font-size: 12px; }
 @media (max-width: 1280px) { .status-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }.filter-bar { grid-template-columns: repeat(3, minmax(150px, 1fr)); } }
 @media (max-width: 760px) { .page-heading { align-items: flex-start; flex-direction: column; }.status-cards, .filter-bar { grid-template-columns: 1fr; } }

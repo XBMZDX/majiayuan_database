@@ -12,6 +12,7 @@ public class AnalysisResult {
     private String artifactCode;
     private String artifactName;
     private String samplePhoto;
+    private String sampleStatus;
     private String experimentMethod;
     private String detectionPurpose;
     private String instrumentModel;
