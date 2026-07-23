@@ -28,4 +28,7 @@ public interface AnalysisResultMapper {
 
     @Delete("DELETE FROM analysis_results WHERE detection_id = #{detectionId}")
     void deleteByDetectionId(Integer detectionId);
+
+    @Delete("DELETE FROM analysis_results WHERE detection_id = #{detectionId} AND experiment_method = #{method}")
+    void deleteByDetectionIdAndMethod(@Param("detectionId") Integer detectionId, @Param("method") String method);
 }

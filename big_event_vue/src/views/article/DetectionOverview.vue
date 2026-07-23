@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 
 const route = useRoute()
@@ -13,6 +13,9 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const addVisible = ref(false)
 const addForm = ref(defaultAddForm())
+const methodEditorVisible = ref(false)
+const methodSaving = ref(false)
+const methodEditorForm = ref({ artifactCode: '', artifactName: '', excavationRelic: '', sampleMaterial: '', methods: [], originalMethods: [] })
 // 默认聚焦已有检测记录的文物；需要补检时可切换为全部或仅未检测。
 const filters = ref({ detectionScope: 'detected', sourceType: '', material: '', method: '', resultStatus: '', keyword: '' })
 
@@ -103,6 +106,43 @@ const submitAdd = async () => {
     await fetchOverview()
 }
 
+const openArtifactMethodEditor = row => {
+    const currentMethods = (row.methods || []).map(item => item.name).filter(Boolean)
+    methodEditorForm.value = {
+        artifactCode: row.artifactCode || '',
+        artifactName: row.artifactName || '',
+        excavationRelic: row.excavationRelic || '',
+        sampleMaterial: row.material || '',
+        methods: [...currentMethods],
+        originalMethods: [...currentMethods]
+    }
+    methodEditorVisible.value = true
+}
+const saveArtifactMethods = async () => {
+    const methodsToSave = [...new Set(methodEditorForm.value.methods.map(item => String(item || '').trim()).filter(Boolean))]
+    const hasRemovedMethod = methodEditorForm.value.originalMethods.some(item => !methodsToSave.includes(item))
+    if (hasRemovedMethod) {
+        try {
+            await ElMessageBox.confirm('移除检测方法会同时删除该方法对应的分析结果和实验结果，是否继续？', '确认移除检测方法', { type: 'warning' })
+        } catch (error) { return }
+    }
+    methodSaving.value = true
+    try {
+        const response = await request.put('/admin/detection/artifact-methods', {
+            artifactCode: methodEditorForm.value.artifactCode,
+            artifactName: methodEditorForm.value.artifactName,
+            excavationRelic: methodEditorForm.value.excavationRelic,
+            sampleMaterial: methodEditorForm.value.sampleMaterial,
+            methods: methodsToSave
+        })
+        ElMessage.success(`检测方法已同步：新增 ${response.data?.addedMethodCount || 0} 项，移除 ${response.data?.removedMethodCount || 0} 项`)
+        methodEditorVisible.value = false
+        await fetchOverview()
+    } finally {
+        methodSaving.value = false
+    }
+}
+
 watch(() => route.query.method, method => {
     filters.value.method = typeof method === 'string' ? method : ''
     pageNum.value = 1
@@ -173,7 +213,7 @@ onMounted(fetchOverview)
             </template>
 
             <template v-if="viewMode === 'list'">
-                <el-table :data="pagedItems" border stripe>
+                <el-table :data="pagedItems" border stripe @row-dblclick="openArtifactMethodEditor">
                     <el-table-column label="文物编号" prop="artifactCode" min-width="120"><template #default="{ row }">{{ row.artifactCode || '-' }}</template></el-table-column>
                     <el-table-column label="文物名称" prop="artifactName" min-width="130"><template #default="{ row }">{{ row.artifactName || '-' }}</template></el-table-column>
                     <el-table-column label="出土来源" min-width="150"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.sourceType }}</el-tag><span class="relic-name">{{ row.excavationRelic || '-' }}</span></template></el-table-column>
@@ -223,6 +263,19 @@ onMounted(fetchOverview)
             </el-form>
             <template #footer><el-button @click="addVisible = false">取消</el-button><el-button type="primary" @click="submitAdd">保存</el-button></template>
         </el-dialog>
+
+        <el-dialog v-model="methodEditorVisible" title="维护文物检测方法" width="680px" destroy-on-close :close-on-click-modal="false">
+            <el-form :model="methodEditorForm" label-width="105px">
+                <el-row :gutter="16">
+                    <el-col :span="12"><el-form-item label="文物编号"><el-input v-model="methodEditorForm.artifactCode" disabled /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="文物名称"><el-input v-model="methodEditorForm.artifactName" disabled /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="出土来源"><el-input v-model="methodEditorForm.excavationRelic" disabled /></el-form-item></el-col>
+                    <el-col :span="12"><el-form-item label="样品材质"><el-input v-model="methodEditorForm.sampleMaterial" disabled /></el-form-item></el-col>
+                    <el-col :span="24"><el-form-item label="检测方法"><el-select v-model="methodEditorForm.methods" multiple filterable allow-create default-first-option placeholder="选择或输入检测方法" style="width:100%"><el-option v-for="item in methods" :key="item" :label="item" :value="item" /></el-select><div class="method-editor-tip">保留的方法及其结果不会改变；新增方法会创建新的检测记录，移除方法会删除对应结果。</div></el-form-item></el-col>
+                </el-row>
+            </el-form>
+            <template #footer><el-button @click="methodEditorVisible = false">取消</el-button><el-button type="primary" :loading="methodSaving" @click="saveArtifactMethods">保存</el-button></template>
+        </el-dialog>
     </div>
 </template>
 
@@ -243,6 +296,7 @@ onMounted(fetchOverview)
 .relic-name { display: block; margin-top: 5px; color: #4e5969; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .method-tags { display: flex; flex-wrap: wrap; gap: 6px; }.method-tag, .matrix-cell { cursor: pointer; }.empty-value { color: #c9cdd4; }
 .completeness-text { margin-top: 5px; color: #86909c; font-size: 12px; line-height: 1.35; }.pagination { margin-top: 16px; justify-content: flex-end; }
+.method-editor-tip { margin-top: 7px; color: #86909c; font-size: 12px; line-height: 1.5; }
 .matrix-wrap { overflow: auto; }.matrix-legend { display: flex; gap: 8px; margin-bottom: 12px; }.matrix-artifact-name { display: block; margin-top: 4px; color: #86909c; font-size: 12px; }
 @media (max-width: 1280px) { .status-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }.filter-bar { grid-template-columns: repeat(3, minmax(150px, 1fr)); } }
 @media (max-width: 760px) { .page-heading { align-items: flex-start; flex-direction: column; }.status-cards, .filter-bar { grid-template-columns: 1fr; } }

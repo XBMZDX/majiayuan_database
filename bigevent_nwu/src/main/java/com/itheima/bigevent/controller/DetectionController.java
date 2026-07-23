@@ -9,6 +9,7 @@ import com.itheima.bigevent.mapper.ExperimentResultMapper;
 import com.itheima.bigevent.service.DetectionArtifactOverviewService;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -161,6 +162,74 @@ public class DetectionController {
     @PostMapping("/batch-delete")
     public Result batchDelete(@RequestBody List<Integer> ids) { mapper.batchDelete(ids); return Result.success(); }
 
+    /**
+     * 以文物为维度维护检测方法。保留未变方法及其结果，只为新增/移除的方法创建或删除数据。
+     */
+    @PutMapping("/artifact-methods")
+    @Transactional(rollbackFor = Exception.class)
+    public Result<Map<String, Object>> updateArtifactMethods(@RequestBody Map<String, Object> body) {
+        String artifactCode = text(body.get("artifactCode"));
+        String artifactName = text(body.get("artifactName"));
+        if (artifactCode.isBlank() && artifactName.isBlank()) return Result.error("文物编号和文物名称不能同时为空");
+
+        Set<String> desiredMethods = methodSet(body.get("methods"));
+        List<DetectionAnalysis> detections = mapper.list().stream()
+            .filter(item -> sameArtifact(artifactCode, artifactName, item))
+            .toList();
+        Set<String> existingMethods = new LinkedHashSet<>();
+        int removedMethodCount = 0;
+
+        for (DetectionAnalysis detection : detections) {
+            Set<String> originalMethods = methodSet(detection.getPurpose());
+            if (originalMethods.isEmpty()) continue;
+            existingMethods.addAll(originalMethods);
+
+            Set<String> removedMethods = new LinkedHashSet<>(originalMethods);
+            removedMethods.removeAll(desiredMethods);
+            Set<String> remainingMethods = new LinkedHashSet<>(originalMethods);
+            remainingMethods.retainAll(desiredMethods);
+
+            if (remainingMethods.isEmpty()) {
+                resultMapper.deleteByDetectionId(detection.getId());
+                expResultMapper.deleteByDetectionId(detection.getId());
+                mapper.delete(detection.getId());
+            } else if (!removedMethods.isEmpty()) {
+                for (String method : removedMethods) {
+                    resultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
+                    expResultMapper.deleteByDetectionIdAndMethod(detection.getId(), method);
+                }
+                detection.setPurpose(String.join("/", remainingMethods));
+                detection.setUpdateTime(LocalDateTime.now());
+                mapper.update(detection);
+            }
+            removedMethodCount += removedMethods.size();
+        }
+
+        Set<String> addedMethods = new LinkedHashSet<>(desiredMethods);
+        addedMethods.removeAll(existingMethods);
+        int nextSerial = mapper.list().size() + 1;
+        for (String method : addedMethods) {
+            DetectionAnalysis detection = new DetectionAnalysis();
+            detection.setSerialNumber(String.valueOf(nextSerial++));
+            detection.setArtifactCode(artifactCode.replace('：', ':'));
+            detection.setArtifactName(artifactName);
+            detection.setExcavationRelic(text(body.get("excavationRelic")));
+            detection.setSampleMaterial(text(body.get("sampleMaterial")));
+            detection.setSampleStatus("待检测");
+            detection.setPurpose(method);
+            detection.setCreateTime(LocalDateTime.now());
+            detection.setUpdateTime(LocalDateTime.now());
+            mapper.insert(detection);
+            createInitialResults(detection);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("addedMethodCount", addedMethods.size());
+        result.put("removedMethodCount", removedMethodCount);
+        result.put("methods", desiredMethods);
+        return Result.success(result);
+    }
+
     @Mapper
     public interface DetectionMapper {
         @Select("SELECT * FROM detection_analysis ORDER BY CAST(serial_number AS UNSIGNED) ASC")
@@ -185,4 +254,50 @@ public class DetectionController {
             d.setArtifactCode(d.getArtifactCode().trim().replace('：', ':'));
         }
     }
+
+    private void createInitialResults(DetectionAnalysis detection) {
+        for (String method : methodSet(detection.getPurpose())) {
+            AnalysisResult analysisResult = new AnalysisResult();
+            analysisResult.setDetectionId(detection.getId());
+            analysisResult.setArtifactCode(detection.getArtifactCode());
+            analysisResult.setArtifactName(detection.getArtifactName());
+            analysisResult.setSamplePhoto(detection.getSamplePhoto());
+            analysisResult.setExperimentMethod(method);
+            resultMapper.insert(analysisResult);
+
+            ExperimentResult experimentResult = new ExperimentResult();
+            experimentResult.setDetectionId(detection.getId());
+            experimentResult.setExperimentName(method);
+            experimentResult.setStatus("待检测");
+            expResultMapper.insert(experimentResult);
+        }
+    }
+
+    private boolean sameArtifact(String artifactCode, String artifactName, DetectionAnalysis detection) {
+        String selectedCode = normalizeCode(artifactCode);
+        if (!selectedCode.isBlank()) return selectedCode.equals(normalizeCode(detection.getArtifactCode()));
+        String selectedName = text(artifactName).toLowerCase(Locale.ROOT);
+        return !selectedName.isBlank() && selectedName.equals(text(detection.getArtifactName()).toLowerCase(Locale.ROOT));
+    }
+
+    private Set<String> methodSet(Object value) {
+        Set<String> methods = new LinkedHashSet<>();
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) addMethod(methods, item);
+        } else {
+            for (String item : text(value).split("/")) addMethod(methods, item);
+        }
+        return methods;
+    }
+
+    private void addMethod(Set<String> methods, Object value) {
+        String method = text(value).trim();
+        if (!method.isBlank()) methods.add(method);
+    }
+
+    private String normalizeCode(Object value) {
+        return text(value).replace('：', ':').replaceAll("[\\s\\-_ *]", "");
+    }
+
+    private String text(Object value) { return value == null ? "" : value.toString().trim(); }
 }
