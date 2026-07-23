@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request.js'
 import { artifactsBatchImportService } from '@/api/Artifacts.js'
+import ArtifactDetailDrawer from './components/ArtifactDetailDrawer.vue'
 import * as XLSX from 'xlsx'
 
 // 墓葬列表 + 选中
@@ -232,36 +233,7 @@ onMounted(() => { fetchBurialList() })
         </el-card>
     </div>
 
-    <!-- 文物详情抽屉 -->
-    <el-drawer v-model="detailVisible" title="文物详情" direction="rtl" size="55%">
-        <el-descriptions :column="2" border>
-            <el-descriptions-item label="序号">{{ detailData.serialNumber ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物新编号">{{ detailData.newArtifactCode || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物新名称">{{ detailData.newArtifactName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物原始编号">{{ detailData.originalArtifactCode || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文物原名称">{{ detailData.originalArtifactName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="材质1">{{ detailData.material1 || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="材质2">{{ detailData.material2 || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="完整度">{{ detailData.completeness || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="数量1">{{ detailData.quantity1 ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="数量2">{{ detailData.quantity2 ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="尺寸">{{ detailData.dimensions || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="重量">{{ detailData.weight || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="出土遗迹">{{ detailData.excavationRelic || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="出土位置">{{ detailData.excavationPosition || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="出土时间">{{ detailData.excavationTime || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="存放方式">{{ detailData.storageMethod || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="拍照人">{{ detailData.photographer || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="定级情况">{{ detailData.gradingStatus || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="科技检测情况">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
-            <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="视觉特征" :span="2"><div v-html="detailData.artifactDescription || '-'" /></el-descriptions-item>
-        </el-descriptions>
-    </el-drawer>
+    <ArtifactDetailDrawer v-model="detailVisible" :artifact="detailData" @saved="loadBurialData" />
 
     <!-- 添加文物弹窗（与文物信息总览字段完全一致） -->
     <el-dialog v-model="addVisible" title="添加文物" width="760px" :close-on-click-modal="false" destroy-on-close>
