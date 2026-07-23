@@ -28,7 +28,11 @@ public class DetectionArtifactOverviewService {
     private JdbcTemplate jdbcTemplate;
 
     public Map<String, Object> getOverview() {
-        Map<String, ArtifactSummary> summaries = new LinkedHashMap<>();
+        // 每条 artifacts 记录都必须保留，不能用文物编号/名称去重，否则会少统计同编号或同名文物。
+        List<ArtifactSummary> summaries = new ArrayList<>();
+        Map<String, List<ArtifactSummary>> artifactIndex = new LinkedHashMap<>();
+        // 只有检测分析中找不到实体文物的记录才按标识合并为“未关联”文物。
+        Map<String, ArtifactSummary> unlinkedSummaries = new LinkedHashMap<>();
         Set<String> matrixMethods = new LinkedHashSet<>(loadLabMethods());
 
         for (Map<String, Object> artifact : jdbcTemplate.queryForList("""
@@ -39,13 +43,18 @@ public class DetectionArtifactOverviewService {
             FROM artifacts
             ORDER BY id
             """)) {
+            Integer artifactId = number(artifact.get("id"));
             String code = firstText(artifact.get("newArtifactCode"), artifact.get("originalArtifactCode"));
             String name = firstText(artifact.get("newArtifactName"), artifact.get("originalArtifactName"));
-            ArtifactSummary summary = new ArtifactSummary(code, name);
+            ArtifactSummary summary = new ArtifactSummary("artifact:" + artifactId, code, name);
             summary.excavationRelic = text(artifact.get("excavationRelic"));
             summary.material = text(artifact.get("material1"));
             summary.sourceType = sourceType(artifact.get("coffinIndex"), artifact.get("chariotIndex"));
-            summaries.putIfAbsent(summary.key, summary);
+            summaries.add(summary);
+            String identity = artifactIdentity(code, name);
+            if (!"unlinked:".equals(identity)) {
+                artifactIndex.computeIfAbsent(identity, ignored -> new ArrayList<>()).add(summary);
+            }
         }
 
         Map<String, ResultSnapshot> resultSnapshots = loadResultSnapshots();
@@ -61,29 +70,37 @@ public class DetectionArtifactOverviewService {
             Integer detectionId = number(detection.get("id"));
             String code = text(detection.get("artifactCode"));
             String name = text(detection.get("artifactName"));
-            String key = artifactKey(code, name);
-            ArtifactSummary summary = summaries.get(key);
-            if (summary == null) {
-                summary = new ArtifactSummary(code, name);
-                summary.excavationRelic = text(detection.get("excavationRelic"));
-                summary.material = text(detection.get("sampleMaterial"));
-                summary.sourceType = "未关联";
-                summaries.put(key, summary);
+            String identity = artifactIdentity(code, name);
+            List<ArtifactSummary> matchedArtifacts = artifactIndex.get(identity);
+            if (matchedArtifacts == null || matchedArtifacts.isEmpty()) {
+                String unlinkedKey = identity.startsWith("unlinked:") ? "unlinked:detection:" + detectionId : "unlinked:" + identity;
+                ArtifactSummary summary = unlinkedSummaries.get(unlinkedKey);
+                if (summary == null) {
+                    summary = new ArtifactSummary(unlinkedKey, code, name);
+                    summary.excavationRelic = text(detection.get("excavationRelic"));
+                    summary.material = text(detection.get("sampleMaterial"));
+                    summary.sourceType = "未关联";
+                    unlinkedSummaries.put(unlinkedKey, summary);
+                    summaries.add(summary);
+                }
+                matchedArtifacts = List.of(summary);
             }
-            summary.latestDetectionTime = latest(summary.latestDetectionTime, detection.get("updateTime"), detection.get("createTime"));
-
-            List<String> methods = splitMethods(text(detection.get("purpose")));
-            if (methods.isEmpty()) continue;
-            for (String method : methods) {
-                matrixMethods.add(method);
-                ResultSnapshot snapshot = resultSnapshots.get(resultKey(detectionId, method));
-                summary.addMethod(method, snapshot, detectionId, text(detection.get("sampleStatus")));
+            for (ArtifactSummary summary : matchedArtifacts) {
+                summary.excavationRelic = text(detection.get("excavationRelic"));
+                if ("未关联".equals(summary.sourceType)) summary.material = text(detection.get("sampleMaterial"));
+                summary.latestDetectionTime = latest(summary.latestDetectionTime, detection.get("updateTime"), detection.get("createTime"));
+                List<String> methods = splitMethods(text(detection.get("purpose")));
+                for (String method : methods) {
+                    matrixMethods.add(method);
+                    ResultSnapshot snapshot = resultSnapshots.get(resultKey(detectionId, method));
+                    summary.addMethod(method, snapshot, detectionId, text(detection.get("sampleStatus")));
+                }
             }
         }
 
         List<Map<String, Object>> items = new ArrayList<>();
         int notDetected = 0, inProgress = 0, partial = 0, complete = 0, noResult = 0;
-        for (ArtifactSummary summary : summaries.values()) {
+        for (ArtifactSummary summary : summaries) {
             summary.finish();
             items.add(summary.toMap());
             switch (summary.resultStatus) {
@@ -156,10 +173,10 @@ public class DetectionArtifactOverviewService {
         private String resultCompleteness = "无检测记录";
         private final Map<String, MethodSummary> methods = new LinkedHashMap<>();
 
-        private ArtifactSummary(String artifactCode, String artifactName) {
+        private ArtifactSummary(String key, String artifactCode, String artifactName) {
             this.artifactCode = artifactCode;
             this.artifactName = artifactName;
-            this.key = artifactKey(artifactCode, artifactName);
+            this.key = key;
         }
 
         private void addMethod(String method, ResultSnapshot snapshot, Integer detectionId, String sampleStatus) {
@@ -294,11 +311,11 @@ public class DetectionArtifactOverviewService {
         catch (NumberFormatException ignored) { return null; }
     }
 
-    private static String artifactKey(String code, String name) {
+    private static String artifactIdentity(String code, String name) {
         String normalizedCode = normalizeCode(code);
         if (!normalizedCode.isBlank()) return "code:" + normalizedCode;
         String normalizedName = text(name).toLowerCase(Locale.ROOT);
-        return normalizedName.isBlank() ? "unlinked:" + System.nanoTime() : "name:" + normalizedName;
+        return normalizedName.isBlank() ? "unlinked:" : "name:" + normalizedName;
     }
 
     private static String resultKey(Integer detectionId, String method) {

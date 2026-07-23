@@ -39,7 +39,7 @@
             <if test="textDescriber != null">text_describer = #{textDescriber},</if>
             <if test="notes != null">notes = #{notes},</if>
             <if test="gradingStatus != null">grading_status = #{gradingStatus},</if>
-            <if test="testingStatus != null">testing_status = #{testingStatus},</if>
+            testing_status = NULL,
             update_time = #{updateTime}
         </set>
         WHERE id = #{id}

@@ -13,7 +13,8 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const addVisible = ref(false)
 const addForm = ref(defaultAddForm())
-const filters = ref({ sourceType: '', material: '', method: '', resultStatus: '', keyword: '' })
+// 默认聚焦已有检测记录的文物；需要补检时可切换为全部或仅未检测。
+const filters = ref({ detectionScope: 'detected', sourceType: '', material: '', method: '', resultStatus: '', keyword: '' })
 
 function defaultAddForm() {
     return {
@@ -31,7 +32,12 @@ const filteredItems = computed(() => items.value.filter(item => {
     const matchesKeyword = !keyword || [item.artifactCode, item.artifactName, item.excavationRelic]
         .some(value => String(value || '').toLowerCase().includes(keyword))
     const matchesMethod = !filters.value.method || item.methods?.some(method => method.name === filters.value.method)
+    const hasDetection = Boolean(item.methods?.length)
+    const matchesDetectionScope = filters.value.detectionScope === 'all'
+        || (filters.value.detectionScope === 'detected' && hasDetection)
+        || (filters.value.detectionScope === 'notDetected' && !hasDetection)
     return matchesKeyword
+        && matchesDetectionScope
         && (!filters.value.sourceType || item.sourceType === filters.value.sourceType)
         && (!filters.value.material || item.material === filters.value.material)
         && matchesMethod
@@ -51,7 +57,7 @@ const fetchOverview = async () => {
 }
 
 const resetFilters = () => {
-    filters.value = { sourceType: '', material: '', method: '', resultStatus: '', keyword: '' }
+    filters.value = { detectionScope: 'detected', sourceType: '', material: '', method: '', resultStatus: '', keyword: '' }
     pageNum.value = 1
 }
 const handleFilter = () => { pageNum.value = 1 }
@@ -126,6 +132,11 @@ onMounted(fetchOverview)
 
         <el-card shadow="never" class="filter-card">
             <div class="filter-bar">
+                <el-select v-model="filters.detectionScope" placeholder="检测范围" @change="handleFilter">
+                    <el-option label="已检测文物" value="detected" />
+                    <el-option label="全部文物" value="all" />
+                    <el-option label="仅未检测文物" value="notDetected" />
+                </el-select>
                 <el-input v-model="filters.keyword" clearable placeholder="搜索文物编号、名称或出土来源" @input="handleFilter" />
                 <el-select v-model="filters.sourceType" clearable placeholder="出土来源" @change="handleFilter">
                     <el-option label="墓葬" value="墓葬" />
@@ -227,7 +238,7 @@ onMounted(fetchOverview)
 .status-cards span { font-size: 12px; color: #86909c; }
 .status-cards .in-progress strong { color: #d97706; }.status-cards .partial strong { color: #2563eb; }.status-cards .complete strong { color: #059669; }.status-cards .no-result strong { color: #dc2626; }
 .filter-card, .content-card { border-color: #e5e6eb; margin-bottom: 16px; }
-.filter-bar { display: grid; grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(130px, 1fr)) auto; gap: 11px; }
+.filter-bar { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) minmax(220px, 1.3fr) auto; gap: 11px; }
 .content-header { align-items: center; font-weight: 600; }
 .relic-name { display: block; margin-top: 5px; color: #4e5969; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .method-tags { display: flex; flex-wrap: wrap; gap: 6px; }.method-tag, .matrix-cell { cursor: pointer; }.empty-value { color: #c9cdd4; }

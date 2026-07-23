@@ -291,7 +291,7 @@ const openDetail = (row) => {
     loadArtifactImages(row.id)
 }
 
-const getTestingStatusText = (row) => row?.testingStatusDisplay || row?.testingStatus || '无'
+const getTestingStatusText = row => row?.testingStatusDisplay || '无'
 const getArtifactImage = (row) => {
     const value = row?.images
     if (!value) return ''
@@ -549,7 +549,7 @@ const handleImport = async () => {
             <el-table-column label="材质" prop="material1" />
             <el-table-column label="完整度" prop="completeness" />
             <el-table-column label="数量" prop="quantity1" />
-            <el-table-column label="科技检测情况" width="220">
+            <el-table-column label="已做检测方法" width="220">
                 <template #default="{ row }">
                     <span>{{ getTestingStatusText(row) }}</span>
                 </template>
@@ -605,7 +605,7 @@ const handleImport = async () => {
                     <el-form-item label="绘图人"><el-input v-model="ArtifactsModel.draftsperson" placeholder="请输入绘图人" /></el-form-item>
                     <el-form-item label="文字描述人"><el-input v-model="ArtifactsModel.textDescriber" placeholder="请输入文字描述人" /></el-form-item>
                     <el-form-item label="定级情况"><el-input v-model="ArtifactsModel.gradingStatus" placeholder="请输入定级情况" /></el-form-item>
-                    <el-form-item label="科技检测情况"><el-input v-model="ArtifactsModel.testingStatus" placeholder="请输入检测情况" /></el-form-item>
+                    <el-form-item label="已做检测方法"><el-input value="由检测分析页面自动更新" disabled /></el-form-item>
                     <el-form-item label="备注"><el-input v-model="ArtifactsModel.notes" type="textarea" :rows="2" placeholder="请输入备注" /></el-form-item>
                     <el-form-item label="图片">
                         <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
@@ -658,7 +658,7 @@ const handleImport = async () => {
                     <el-form-item label="绘图人"><el-input v-model="editData.draftsperson" /></el-form-item>
                     <el-form-item label="文字描述人"><el-input v-model="editData.textDescriber" /></el-form-item>
                     <el-form-item label="定级情况"><el-input v-model="editData.gradingStatus" /></el-form-item>
-                    <el-form-item label="科技检测情况"><el-input v-model="editData.testingStatus" /></el-form-item>
+                    <el-form-item label="已做检测方法"><el-input :model-value="getTestingStatusText(editData)" disabled /></el-form-item>
                     <el-form-item label="备注"><el-input v-model="editData.notes" type="textarea" :rows="2" /></el-form-item>
                     <el-form-item label="图片">
                         <el-upload class="avatar-uploader" :auto-upload="true" :show-file-list="false" action="/api/upload"
@@ -701,7 +701,7 @@ const handleImport = async () => {
                 <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="定级情况">{{ detailData.gradingStatus || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="科技检测情况">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
+                <el-descriptions-item label="已做检测方法">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
                 <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '—' }}</el-descriptions-item>
@@ -764,7 +764,7 @@ const handleImport = async () => {
                         <el-form-item label="绘图人"><el-input v-model="detailData.draftsperson" /></el-form-item>
                         <el-form-item label="文字描述人"><el-input v-model="detailData.textDescriber" /></el-form-item>
                         <el-form-item label="定级情况"><el-input v-model="detailData.gradingStatus" /></el-form-item>
-                        <el-form-item label="科技检测情况"><el-input v-model="detailData.testingStatus" /></el-form-item>
+                        <el-form-item label="已做检测方法"><el-input :model-value="getTestingStatusText(detailData)" disabled /></el-form-item>
                         <el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item>
                         <el-form-item label="图片图库">
                             <div class="artifact-image-editor-entry">

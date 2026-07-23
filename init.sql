@@ -1463,3 +1463,6 @@ CREATE TABLE IF NOT EXISTS digital_model_collection_item (
     create_time    DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_digital_model_collection_item (collection_id, resource_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='三维模型集合条目';
+
+-- 文物检测情况改由 detection_analysis 的 purpose 实时计算，不保留历史手工录入值。
+UPDATE artifacts SET testing_status = NULL WHERE testing_status IS NOT NULL AND testing_status <> '';

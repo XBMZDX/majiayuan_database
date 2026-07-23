@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -24,12 +26,19 @@ public class ArtifactsServiceImpl implements ArtifactsService {
     @Autowired
     private ArtifactDetectionStatusService artifactDetectionStatusService;
 
+    @PostConstruct
+    public void clearLegacyManualTestingStatus() {
+        artifactsMapper.clearManualTestingStatus();
+    }
+
     /**
      * 新增文物 — 自动分配序号（填补空缺或末尾追加），事务保证原子性
      */
     @Override
     @Transactional
     public void add(artifacts artifact) {
+        // 此字段不再允许人工维护，展示值统一由检测分析记录实时生成。
+        artifact.setTestingStatus(null);
         // 设置创建时间和更新时间
         artifact.setCreateTime(LocalDateTime.now());
         artifact.setUpdateTime(LocalDateTime.now());
@@ -87,6 +96,8 @@ public class ArtifactsServiceImpl implements ArtifactsService {
 
     @Override
     public void update(artifacts artifact) {
+        // 忽略任何客户端传入的手工检测情况。
+        artifact.setTestingStatus(null);
         // 设置更新时间
         artifact.setUpdateTime(LocalDateTime.now());
 

@@ -30,7 +30,7 @@ const imageLoading = ref(false)
 const imageUploading = ref(false)
 const artifactImages = ref([])
 
-const getTestingStatusText = row => row?.testingStatusDisplay || row?.testingStatus || '无'
+const getTestingStatusText = row => row?.testingStatusDisplay || '无'
 const getArtifactImage = row => {
     const value = row?.images
     if (!value) return ''
@@ -138,7 +138,7 @@ const saveDetailEdit = async () => {
                 <el-descriptions-item label="绘图人">{{ detailData.draftsperson || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="文字描述人">{{ detailData.textDescriber || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="定级情况">{{ detailData.gradingStatus || '—' }}</el-descriptions-item>
-                <el-descriptions-item label="科技检测情况">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
+                <el-descriptions-item label="已做检测方法">{{ getTestingStatusText(detailData) }}</el-descriptions-item>
                 <el-descriptions-item label="文物流转过程" :span="2">{{ detailData.transferProcess || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="修复复原状况" :span="2">{{ detailData.restorationStatus || '—' }}</el-descriptions-item>
                 <el-descriptions-item label="备注" :span="2">{{ detailData.notes || '—' }}</el-descriptions-item>
@@ -185,7 +185,7 @@ const saveDetailEdit = async () => {
                     <el-form-item label="绘图人"><el-input v-model="detailData.draftsperson" /></el-form-item>
                     <el-form-item label="文字描述人"><el-input v-model="detailData.textDescriber" /></el-form-item>
                     <el-form-item label="定级情况"><el-input v-model="detailData.gradingStatus" /></el-form-item>
-                    <el-form-item label="科技检测情况"><el-input v-model="detailData.testingStatus" /></el-form-item>
+                    <el-form-item label="已做检测方法"><el-input :model-value="getTestingStatusText(detailData)" disabled /></el-form-item>
                     <el-form-item label="备注"><el-input v-model="detailData.notes" type="textarea" :rows="2" /></el-form-item>
                     <el-form-item label="图片图库"><div class="artifact-image-editor-entry"><el-image v-if="getCoverImage()" :src="getCoverImage()" :preview-src-list="imagePreviewList().length ? imagePreviewList() : [getCoverImage()]" fit="cover" class="detail-artifact-image" /><el-empty v-else description="暂无图片" :image-size="70" /><el-button type="primary" plain @click="openGallery">管理图库</el-button></div></el-form-item>
                 </el-col>

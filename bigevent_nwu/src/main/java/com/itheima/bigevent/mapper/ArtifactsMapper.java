@@ -42,6 +42,10 @@ public interface ArtifactsMapper {
     @Update("SET @num = 0")
     void initRowNum();
 
+    // 科技检测情况由 detection_analysis 实时计算，清除历史手工录入值。
+    @Update("UPDATE artifacts SET testing_status = NULL WHERE testing_status IS NOT NULL AND testing_status <> ''")
+    void clearManualTestingStatus();
+
     // 修改文物信息
     void update(artifacts artifact);
 

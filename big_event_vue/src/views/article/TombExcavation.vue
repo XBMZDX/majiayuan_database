@@ -60,12 +60,13 @@ const pagedArtifacts = computed(() => {
     return artifacts.value.slice(start, start + pageSize.value)
 })
 const onPageChange = (num) => { pageNum.value = num }
+const getLocalSerial = index => (pageNum.value - 1) * pageSize.value + index + 1
 
 // 详情
 const detailVisible = ref(false)
 const detailData = ref({})
 const openDetail = (row) => { detailData.value = { ...row }; detailVisible.value = true }
-const getTestingStatusText = row => row?.testingStatusDisplay || row?.testingStatus || '无'
+const getTestingStatusText = row => row?.testingStatusDisplay || '无'
 
 // ========== 批量删除（与文物信息总览相同模式） ==========
 const batchMode = ref(false)
@@ -112,7 +113,7 @@ const handleImport = async () => {
             transferProcess: item['文物流转过程'] || '', restorationStatus: item['修复、复原状况'] || '',
             photographer: item['拍照人'] || '', draftsperson: item['绘图人'] || '',
             textDescriber: item['文字描述人'] || '', notes: item['备注'] || '',
-            gradingStatus: item['定级情况'] || '', testingStatus: item['科技检测情况'] || ''
+            gradingStatus: item['定级情况'] || ''
         }))
         await artifactsBatchImportService(importData)
         ElMessage.success('导入成功'); importFile.value = null; uploadRef.value?.clearFiles()
@@ -128,7 +129,7 @@ const downloadTemplate = () => {
         '材质1', '材质2', '完整度', '视觉特征', '数量1', '数量2',
         '尺寸', '重量', '出土遗迹', '出土位置', '出土时间',
         '存放方式', '文物流转过程', '修复复原状况',
-        '拍照人', '绘图人', '文字描述人', '备注', '定级情况', '科技检测情况']
+        '拍照人', '绘图人', '文字描述人', '备注', '定级情况']
     const ws = XLSX.utils.aoa_to_sheet([headers])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '文物导入模板')
@@ -144,7 +145,7 @@ const addForm = ref({
     excavationRelic: '', excavationPosition: '', excavationTime: '',
     transferProcess: '', restorationStatus: '',
     photographer: '', draftsperson: '', textDescriber: '',
-    notes: '', gradingStatus: '', testingStatus: ''
+    notes: '', gradingStatus: ''
 })
 const submitAdd = async () => {
     await request.post('/artifacts', { ...addForm.value, burialId: selectedBurialId.value })
@@ -204,7 +205,7 @@ onMounted(() => { fetchBurialList() })
             </div>
             <el-table :data="pagedArtifacts" style="width:100%" @selection-change="handleSelectionChange" ref="selectionRef">
                 <el-table-column v-if="batchMode" type="selection" width="50" />
-                <el-table-column label="序号" prop="serialNumber" />
+                <el-table-column type="index" label="序号" :index="getLocalSerial" width="72" />
                 <el-table-column label="文物编号">
                     <template #default="{ row }">{{ row.newArtifactCode || row.originalArtifactCode || '-' }}</template>
                 </el-table-column>
@@ -216,7 +217,7 @@ onMounted(() => { fetchBurialList() })
                 <el-table-column label="材质" prop="material1" />
                 <el-table-column label="完整度" prop="completeness" />
                 <el-table-column label="数量" prop="quantity1" />
-                <el-table-column label="科技检测情况" width="220">
+                <el-table-column label="已做检测方法" width="220">
                     <template #default="{ row }">{{ getTestingStatusText(row) }}</template>
                 </el-table-column>
                 <el-table-column label="操作" fixed="right">
@@ -261,7 +262,6 @@ onMounted(() => { fetchBurialList() })
                 <el-col :span="12"><el-form-item label="绘图人"><el-input v-model="addForm.draftsperson" placeholder="请输入绘图人" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="文字描述人"><el-input v-model="addForm.textDescriber" placeholder="请输入文字描述人" /></el-form-item></el-col>
                 <el-col :span="12"><el-form-item label="定级情况"><el-input v-model="addForm.gradingStatus" placeholder="请输入定级情况" /></el-form-item></el-col>
-                <el-col :span="12"><el-form-item label="科技检测情况"><el-input v-model="addForm.testingStatus" placeholder="请输入检测情况" /></el-form-item></el-col>
                 <el-col :span="24"><el-form-item label="备注"><el-input v-model="addForm.notes" type="textarea" :rows="2" placeholder="请输入备注" /></el-form-item></el-col>
             </el-row>
         </el-form>

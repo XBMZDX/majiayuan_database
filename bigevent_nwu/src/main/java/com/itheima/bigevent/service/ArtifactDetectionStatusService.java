@@ -21,8 +21,7 @@ public class ArtifactDetectionStatusService {
     public List<artifacts> decorate(List<artifacts> artifactList) {
         if (artifactList == null || artifactList.isEmpty()) return artifactList;
         List<Map<String, Object>> detections = jdbcTemplate.queryForList("""
-            SELECT id, artifact_code AS artifactCode, artifact_name AS artifactName,
-                   purpose, instrument_name AS instrumentName
+            SELECT id, artifact_code AS artifactCode, artifact_name AS artifactName, purpose
             FROM detection_analysis
             """);
         for (artifacts artifact : artifactList) {
@@ -48,9 +47,8 @@ public class ArtifactDetectionStatusService {
             boolean matchedByName = detectionCode.isBlank() && !detectionName.isBlank() && artifactNames.contains(detectionName);
             if (!matchedByCode && !matchedByName) continue;
 
-            List<String> labels = splitDetectionNames(firstText(detection.get("purpose"), detection.get("instrumentName")));
-            if (labels.isEmpty()) names.add("检测分析#" + Objects.toString(detection.get("id"), ""));
-            else names.addAll(labels);
+            // 页面只展示检测分析中填写的实验方法（purpose），不使用仪器或结果状态作为替代。
+            names.addAll(splitDetectionNames(Objects.toString(detection.get("purpose"), "")));
         }
         return names.isEmpty() ? "无" : String.join(" / ", names);
     }
@@ -64,14 +62,6 @@ public class ArtifactDetectionStatusService {
 
     private String normalizeName(Object value) {
         return Objects.toString(value, "").trim();
-    }
-
-    private String firstText(Object... values) {
-        for (Object value : values) {
-            String text = Objects.toString(value, "").trim();
-            if (!text.isBlank()) return text;
-        }
-        return "";
     }
 
     private List<String> splitDetectionNames(String value) {
