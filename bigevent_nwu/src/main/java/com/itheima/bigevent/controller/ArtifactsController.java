@@ -66,12 +66,13 @@ public class ArtifactsController {
     public Result<PageBean<artifacts>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String newArtifactName,
             @RequestParam(required = false) String newArtifactCode,
             @RequestParam(required = false) String material1,
             @RequestParam(required = false) String excavationRelic,
             @RequestParam(required = false) String completeness) {
-        PageBean<artifacts> pageBean = artifactsService.list(pageNum, pageSize, newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
+        PageBean<artifacts> pageBean = artifactsService.list(pageNum, pageSize, keyword, newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
         return Result.success(pageBean);
     }
 

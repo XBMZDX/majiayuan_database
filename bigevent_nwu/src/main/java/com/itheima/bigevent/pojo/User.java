@@ -29,6 +29,8 @@ public class User {
     @Email
     private String email;//邮箱
     private String userPic;//用户头像地址
+    private Integer tokenVersion;
+    private LocalDateTime lastLoginTime;
     private LocalDateTime create_time;//创建时间
     private LocalDateTime update_time;//更新时间
 }

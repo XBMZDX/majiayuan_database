@@ -148,6 +148,10 @@ const blobUrl = async (loader, id) => {
 }
 const hydrateMedia = async () => {
     await Promise.all(sourceMedia.value.map(async media => {
+        if (media.fileUrl) {
+            media.thumbnailUrl ||= media.fileUrl
+            return
+        }
         try {
             const url = await blobUrl(getProcessMediaContent, media.sourceMediaId || media.id)
             media.fileUrl = media.thumbnailUrl = url
@@ -156,6 +160,10 @@ const hydrateMedia = async () => {
         }
     }))
     await Promise.all(groups.value.flatMap(group => group.images.map(async image => {
+        if (image.fileUrl) {
+            image.thumbnailUrl ||= image.fileUrl
+            return
+        }
         try {
             const url = image.sourceMediaId
                 ? await blobUrl(getProcessMediaContent, image.sourceMediaId)

@@ -84,7 +84,12 @@ public class RestorationController {
     }
 
     private ResponseEntity<byte[]> binary(Map<String, Object> file) {
-        if (file == null || file.get("fileData") == null) return ResponseEntity.notFound().build();
+        if (file == null) return ResponseEntity.notFound().build();
+        if (file.get("fileData") == null && file.get("fileUrl") != null) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, String.valueOf(file.get("fileUrl"))).build();
+        }
+        if (file.get("fileData") == null) return ResponseEntity.notFound().build();
         String name = URLEncoder.encode(String.valueOf(file.get("fileName")), StandardCharsets.UTF_8)
             .replace("+", "%20");
         MediaType type;

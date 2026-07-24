@@ -338,7 +338,7 @@ const showValidation = (title, errors) => ElMessageBox.alert(
 
 const openTempStep = (parent = null) => {
     Object.assign(tempStepForm, {
-        stepName: parent ? `${parent.stepName}返工` : '', stepType: parent?.stepType || 'other',
+        stepName: parent ? `${parent.stepName}返工` : '', stepType: 'other',
         temporaryReason: parent ? '质量检查或完成后发现问题，需要返工' : '',
         targetPart: parent?.targetPart || '', diseaseIds: parent?.relatedDiseases.map(item => item.diseaseRecordId) || [],
         plannedMethod: '', plannedStartTime: '', plannedEndTime: '', operatorName: '',
@@ -624,7 +624,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                 <el-alert title="过程开始后新增的步骤将作为临时步骤保存；如需调整正式方案，可直接修改，无需申请或审批。" type="info" :closable="false" />
                 <el-form label-position="top" class="dialog-grid">
                     <el-form-item label="步骤名称"><el-input v-model="tempStepForm.stepName" /></el-form-item>
-                    <el-form-item label="步骤类型"><el-select v-model="tempStepForm.stepType"><el-option v-for="item in ['documentation','cleaning','stabilization','desalination','rust_removal','consolidation','correction','bonding','filling','grouting','anchoring','coloring','surface_finish','restoration','evaluation','other']" :key="item" :label="item" :value="item" /></el-select></el-form-item>
                     <el-form-item label="新增/返工原因" class="span-2"><el-input v-model="tempStepForm.temporaryReason" type="textarea" /></el-form-item>
                     <el-form-item label="目标部位"><el-input v-model="tempStepForm.targetPart" /></el-form-item>
                     <el-form-item label="关联病害"><el-select v-model="tempStepForm.diseaseIds" multiple><el-option v-for="item in archiveWorkspace.diseaseRecords" :key="item.id" :label="`${item.diseaseName} · ${item.partName}`" :value="item.id" /></el-select></el-form-item>

@@ -148,9 +148,13 @@ const onSave = async data => {
 }
 const onDelete = async project => {
     try {
-        await ElMessageBox.confirm('确定删除该项目吗？已有业务记录的项目不能删除。', '删除项目', { type: 'warning' })
+        await ElMessageBox.confirm(
+            `确定彻底删除“${project.projectName}”吗？项目档案及其病害调查、修复过程、前后对比、复原成果、监测等全部业务记录将一并删除，且不可恢复。`,
+            '彻底删除项目',
+            { type: 'warning', confirmButtonText: '彻底删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
+        )
         await deleteConservationProject(project.id)
-        ElMessage.success('项目已删除')
+        ElMessage.success('项目档案及关联业务记录已删除')
         await loadProjects()
     } catch (error) {
         if (error !== 'cancel' && error !== 'close') ElMessage.error(error?.message || '项目删除失败')

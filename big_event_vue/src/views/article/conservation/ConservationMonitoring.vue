@@ -64,6 +64,7 @@ const hydrateProtectedMedia = async () => {
         for (const t of p.targets) {
             const baseline = t.baseline
             if (baseline?.baselineMediaId) {
+                if (baseline.baselineFileUrl) continue
                 const loader = baseline.sourceBusinessType === 'comparison_after'
                     ? getComparisonMediaContent
                     : baseline.sourceBusinessType === 'restoration'
@@ -74,17 +75,20 @@ const hydrateProtectedMedia = async () => {
         }
         for (const r of p.records) {
             for (const media of r.media || []) {
+                if (media.fileUrl) continue
                 jobs.push(asObjectUrl(() => getMonitoringMediaContent(media.id)).then(url => { media.fileUrl = url }))
             }
         }
     }
     for (const comparison of sources.value.comparisons || []) {
         for (const media of comparison.images || []) {
+            if (media.fileUrl) continue
             jobs.push(asObjectUrl(() => getComparisonMediaContent(media.id)).then(url => { media.fileUrl = url }))
         }
     }
     for (const restoration of sources.value.restorations || []) {
         for (const media of restoration.media || []) {
+            if (media.fileUrl) continue
             jobs.push(asObjectUrl(() => getRestorationMediaContent(media.id)).then(url => { media.fileUrl = url }))
         }
     }
@@ -223,7 +227,7 @@ const uploadMedia = async file => {
     form.append('createdBy', record.value.monitorPerson || project.value.principal || '')
     const result = await uploadMonitoringMedia(record.value.id, form)
     if (result.data.contentType?.startsWith('image/')) {
-        result.data.fileUrl = await asObjectUrl(() => getMonitoringMediaContent(result.data.id))
+        result.data.fileUrl ||= await asObjectUrl(() => getMonitoringMediaContent(result.data.id))
     }
     record.value.media ||= []
     record.value.media.push(result.data)

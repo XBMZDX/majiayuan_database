@@ -106,7 +106,7 @@ public class ArtifactsServiceImpl implements ArtifactsService {
     }
 
     @Override
-    public PageBean<artifacts> list(Integer pageNum, Integer pageSize, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness) {
+    public PageBean<artifacts> list(Integer pageNum, Integer pageSize, String keyword, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness) {
         // 创建PageBean对象
         PageBean<artifacts> pageBean = new PageBean<>();
 
@@ -114,7 +114,7 @@ public class ArtifactsServiceImpl implements ArtifactsService {
         PageHelper.startPage(pageNum, pageSize);
 
         // 调用Mapper层方法查询数据
-        List<artifacts> artifactsList = artifactsMapper.list(newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
+        List<artifacts> artifactsList = artifactsMapper.list(keyword, newArtifactName, newArtifactCode, material1, excavationRelic, completeness);
 
         // 使用PageInfo获取分页信息
         PageInfo<artifacts> pageInfo = new PageInfo<>(artifactsList);

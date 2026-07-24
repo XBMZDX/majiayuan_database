@@ -17,7 +17,6 @@ import LabInstruments from '@/views/article/LabInstruments.vue'
 import DetectionOverview from '@/views/article/DetectionOverview.vue'
 import DetectionResult from '@/views/article/DetectionResult.vue'
 import ExperimentDetail from '@/views/article/ExperimentDetail.vue'
-import UserAvatarVue from '@/views/user/UserAvatar.vue'
 import UserInfoVue from '@/views/user/UserInfo.vue'
 import UserResetPasswordVue from '@/views/user/UserResetPassword.vue'
 
@@ -49,17 +48,17 @@ const routes = [
         {path:'/conservation/monitor',redirect:'/conservation/overview'},
         {path:'/conservation/project/:projectId/archive',component:()=>import('@/views/article/conservation/ConservationArchive.vue')},
         {path:'/conservation/project/:projectId/disease',component:()=>import('@/views/article/conservation/DiseaseSurvey.vue')},
+        {path:'/conservation/project/:projectId/quick-record',component:()=>import('@/views/article/conservation/ConservationQuickRecord.vue')},
         {path:'/conservation/project/:projectId/process',component:()=>import('@/views/article/conservation/ConservationProcess.vue')},
         {path:'/conservation/project/:projectId/comparison',component:()=>import('@/views/article/conservation/ConservationComparison.vue'),meta:{moduleName:'修复前后对比'}},
         {path:'/conservation/project/:projectId/restoration',component:()=>import('@/views/article/conservation/ConservationRestoration.vue'),meta:{moduleName:'文物复原成果'}},
         {path:'/conservation/project/:projectId/monitoring',component:()=>import('@/views/article/conservation/Monitor.vue')},
          {path:'/archive/manage',component:()=>import('@/views/article/digitalArchive/ArchiveResourceOverview.vue')},
-         {path:'/archive/files',component:()=>import('@/views/article/digitalArchive/DigitalResourceLibrary.vue')},
+         {path:'/archive/files',component:()=>import('@/views/article/digitalArchive/DigitalResourceLibrary.vue'),props:{documentOnly:true,showSummary:false,showUpload:false}},
          {path:'/archive/media',component:()=>import('@/views/article/digitalArchive/MediaResourceCenter.vue')},
          {path:'/archive/models',component:()=>import('@/views/article/digitalArchive/ThreeDimensionalModelLibrary.vue')},
         {path:'/detection/experiment',component:LabInstruments},
         {path:'/user/info',component:UserInfoVue},
-        {path:'/user/avatar',component:UserAvatarVue},
         {path:'/user/resetPassword',component:UserResetPasswordVue}
     ]}
 ]

@@ -12,6 +12,6 @@ const useUserInfoStore = defineStore('userInfo',()=>{
         info.value={}
     }
     return {info,setInfo,removeInfo}
-},{persist:true})
+})
 
 export default useUserInfoStore;

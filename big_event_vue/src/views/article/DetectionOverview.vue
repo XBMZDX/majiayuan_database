@@ -260,7 +260,6 @@ onMounted(fetchOverview)
                 <h2>检测分析总览</h2>
                 <p>以文物为单位查看检测覆盖情况、最新进度和结果完整度。</p>
             </div>
-            <el-button type="primary" @click="openAdd">新增检测记录</el-button>
         </section>
 
         <section class="status-cards">

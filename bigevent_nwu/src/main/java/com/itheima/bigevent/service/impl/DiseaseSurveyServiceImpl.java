@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.DiseaseSurveyService;
 import com.itheima.bigevent.service.MonitoringService;
+import com.itheima.bigevent.utils.ConservationOssStorage;
 import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -234,33 +235,35 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
             """, recordId);
         if (record == null) throw new IllegalArgumentException("病害记录不存在，请先保存病害信息");
         try {
+            Map<String, String> stored = ConservationOssStorage.upload("disease-media", file);
             GeneratedKeyHolder key = new GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO conservation_disease_media
-                (disease_record_id,survey_id,project_id,file_name,content_type,file_size,file_data,
+                (disease_record_id,survey_id,project_id,file_name,content_type,file_size,file_url,oss_object_key,
                  title,description,annotations_json)
                 VALUES
-                (:recordId,:surveyId,:projectId,:fileName,:contentType,:fileSize,:fileData,
+                (:recordId,:surveyId,:projectId,:fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,
                  :title,:description,CAST(:annotations AS JSON))
                 """, new MapSqlParameterSource(record)
                 .addValue("recordId", recordId)
                 .addValue("fileName", Optional.ofNullable(file.getOriginalFilename()).orElse("disease-image"))
                 .addValue("contentType", contentType)
                 .addValue("fileSize", file.getSize())
-                .addValue("fileData", file.getBytes())
+                .addValue("fileUrl", stored.get("fileUrl"))
+                .addValue("ossObjectKey", stored.get("objectKey"))
                 .addValue("title", text(metadata.get("title")))
                 .addValue("description", text(metadata.get("description")))
                 .addValue("annotations", "[]"), key, new String[]{"id"});
             return mediaMetadata(key.getKey().longValue());
         } catch (Exception exception) {
-            throw new IllegalStateException("病害图片写入MySQL失败", exception);
+            throw new IllegalStateException("病害图片上传到 OSS 失败", exception);
         }
     }
 
     @Override
     public Map<String, Object> getMedia(Long mediaId) {
         return one("""
-            SELECT file_name AS fileName,content_type AS contentType,file_data AS fileData
+            SELECT file_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl
             FROM conservation_disease_media WHERE id=?
             """, mediaId);
     }
@@ -360,7 +363,7 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
         List<Map<String, Object>> media = jdbc.query("""
             SELECT id,disease_record_id AS diseaseRecordId,survey_id AS surveyId,
                    project_id AS projectId,file_name AS fileName,content_type AS contentType,
-                   file_size AS fileSize,title,description,annotations_json AS annotations,
+                   file_size AS fileSize,file_url AS fileUrl,title,description,annotations_json AS annotations,
                    create_time AS createTime
             FROM conservation_disease_media
             WHERE disease_record_id=? ORDER BY create_time,id
@@ -373,7 +376,7 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
         Map<String, Object> media = one("""
             SELECT id,disease_record_id AS diseaseRecordId,survey_id AS surveyId,
                    project_id AS projectId,file_name AS fileName,content_type AS contentType,
-                   file_size AS fileSize,title,description,annotations_json AS annotations,
+                   file_size AS fileSize,file_url AS fileUrl,title,description,annotations_json AS annotations,
                    create_time AS createTime
             FROM conservation_disease_media WHERE id=?
             """, mediaId);
@@ -383,7 +386,9 @@ public class DiseaseSurveyServiceImpl implements DiseaseSurveyService {
     }
 
     private void normalizeMedia(Map<String, Object> media) {
-        media.put("fileUrl", "/api/conservation/disease-media/" + media.get("id") + "/content");
+        if (media.get("fileUrl") == null || media.get("fileUrl").toString().isBlank()) {
+            media.put("fileUrl", "/api/conservation/disease-media/" + media.get("id") + "/content");
+        }
         Object annotations = media.get("annotations");
         if (annotations == null || annotations.toString().isBlank()) {
             media.put("annotations", new ArrayList<>());

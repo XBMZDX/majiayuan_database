@@ -3,22 +3,67 @@ package com.itheima.bigevent.controller;
 import com.itheima.bigevent.pojo.Result;
 import com.itheima.bigevent.utils.AliOssUtil;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
+import jakarta.annotation.PostConstruct;
 import org.apache.ibatis.annotations.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import java.util.UUID;
 import java.util.Locale;
+import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
-@RequestMapping("/api/digital-resources")
+// Vue 开发代理会移除 /api 前缀，因此控制器路径保持项目内部的真实路径。
+@RequestMapping("/digital-resources")
 @CrossOrigin
 public class DigitalResourceController {
 
     @Autowired private ResourceMapper mapper;
+    @Autowired private JdbcTemplate jdbc;
+
+    /**
+     * init.sql 中的 CREATE TABLE IF NOT EXISTS 不会升级已存在的旧表。
+     * 启动时补齐数字资源版本表的新增字段，确保旧数据库也能上传资源。
+     */
+    @PostConstruct
+    public void ensureDigitalResourceVersionSchema() {
+        if (!tableExists("digital_resource_version")) return;
+        addColumnIfMissing("digital_resource_version", "version_type", "VARCHAR(30)");
+        addColumnIfMissing("digital_resource_version", "original_file_name", "VARCHAR(255)");
+        addColumnIfMissing("digital_resource_version", "file_extension", "VARCHAR(30)");
+        addColumnIfMissing("digital_resource_version", "file_size", "BIGINT DEFAULT 0");
+        addColumnIfMissing("digital_resource_version", "file_url", "VARCHAR(1000)");
+        addColumnIfMissing("digital_resource_version", "content_type", "VARCHAR(100)");
+        addColumnIfMissing("digital_resource_version", "version_status", "VARCHAR(30) DEFAULT 'current'");
+        addColumnIfMissing("digital_resource_version", "create_time", "DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
+
+    private boolean tableExists(String tableName) {
+        Integer count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",
+            Integer.class, tableName);
+        return count != null && count > 0;
+    }
+
+    private void addColumnIfMissing(String tableName, String columnName, String definition) {
+        Integer count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?",
+            Integer.class, tableName, columnName);
+        if (count == null || count == 0) {
+            jdbc.execute("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + definition);
+        }
+    }
 
     @GetMapping("/summary")
     public Result<Map<String,Object>> summary(
@@ -47,11 +92,12 @@ public class DigitalResourceController {
             @RequestParam(required = false) String resourceStatus,
             @RequestParam(required = false) String dataStatus,
             @RequestParam(required = false, defaultValue = "false") boolean deleted,
+            @RequestParam(required = false, defaultValue = "false") boolean documentOnly,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "20") int pageSize) {
         int offset = (pageNum - 1) * pageSize;
-        List<Map<String,Object>> list = mapper.list(keyword, resourceType, sourceModule, resourceStatus, dataStatus, deleted, offset, pageSize);
-        long total = mapper.count(keyword, resourceType, sourceModule, resourceStatus, dataStatus, deleted);
+        List<Map<String,Object>> list = mapper.list(keyword, resourceType, sourceModule, resourceStatus, dataStatus, deleted, documentOnly, offset, pageSize);
+        long total = mapper.count(keyword, resourceType, sourceModule, resourceStatus, dataStatus, deleted, documentOnly);
         Map<String,Object> r = new LinkedHashMap<>();
         r.put("records", list); r.put("total", total); r.put("pageNum", pageNum); r.put("pageSize", pageSize);
         return Result.success(r);
@@ -69,6 +115,26 @@ public class DigitalResourceController {
         return Result.success(d);
     }
 
+    /** 以附件形式转发 OSS 文件，确保浏览器执行下载而非仅预览。 */
+    @GetMapping("/{id}/download")
+    public ResponseEntity<InputStreamResource> download(@PathVariable Long id) throws Exception {
+        Map<String, Object> file = mapper.downloadInfo(id);
+        if (file == null || file.get("fileUrl") == null || file.get("fileUrl").toString().isBlank()) {
+            throw new IllegalArgumentException("资源文件不存在或没有可下载地址");
+        }
+        String originalName = Optional.ofNullable(file.get("originalFileName"))
+            .map(Object::toString).filter(name -> !name.isBlank()).orElse("download");
+        URLConnection connection = new URL(file.get("fileUrl").toString()).openConnection();
+        connection.setConnectTimeout(10_000);
+        connection.setReadTimeout(60_000);
+        InputStream inputStream = connection.getInputStream();
+        String encodedName = URLEncoder.encode(originalName, StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedName)
+            .body(new InputStreamResource(inputStream));
+    }
+
     @PutMapping("/{id}")
     public Result update(@PathVariable Long id, @RequestBody Map<String,Object> body) {
         mapper.updateMeta(id, body); return Result.success();
@@ -83,8 +149,8 @@ public class DigitalResourceController {
             return Result.error("请先选择要上传的文件");
         }
         String originalName = Optional.ofNullable(file.getOriginalFilename()).orElse("file");
-        String resourceType = text(metadata.get("resourceType"));
-        if (resourceType.isEmpty()) resourceType = inferResourceType(originalName);
+        // 资源类型始终根据真实文件扩展名识别，不接受前端手工指定，避免文件类型与实际内容不一致。
+        String resourceType = inferResourceType(originalName);
         String sourceModule = defaultText(metadata.get("sourceModule"), "manual");
         String resourceName = defaultText(metadata.get("resourceName"), baseName(originalName));
         String title = defaultText(metadata.get("title"), resourceName);
@@ -93,7 +159,7 @@ public class DigitalResourceController {
         String resourceStatus = defaultText(metadata.get("resourceStatus"), "normal");
         String dataStatus = defaultText(metadata.get("dataStatus"), "incomplete");
         String fileExtension = fileExtension(originalName);
-        String resourceCode = "DR-" + System.currentTimeMillis();
+        String resourceCode = "DR-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(Locale.ROOT);
         String objectName = "digital-resource/" + UUID.randomUUID() + fileExtension;
         String fileUrl = AliOssUtil.uploadFile(objectName, file.getInputStream());
         String thumbnailUrl = "image".equals(resourceType) ? fileUrl : null;
@@ -150,6 +216,44 @@ public class DigitalResourceController {
             }
         }
         return Result.success(row);
+    }
+
+    /**
+     * Batch upload keeps one independent digital-resource record for every file.
+     * The shared metadata only contains fields that are meaningful for all files,
+     * such as keywords and description; names are derived from the source files.
+     */
+    @PostMapping(value = "/batch-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<Map<String,Object>> batchUpload(
+            @RequestPart("files") MultipartFile[] files,
+            @RequestParam Map<String,String> metadata) {
+        if (files == null || files.length == 0) {
+            return Result.error("请先选择要上传的文件");
+        }
+        List<String> uploadedFiles = new ArrayList<>();
+        List<String> failedFiles = new ArrayList<>();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) continue;
+            try {
+                Map<String,String> singleMetadata = new HashMap<>(metadata);
+                singleMetadata.remove("resourceName");
+                singleMetadata.remove("title");
+                Result<Map<String,Object>> result = create(file, singleMetadata);
+                if (result.getCode() != null && result.getCode() == 0) {
+                    uploadedFiles.add(Optional.ofNullable(file.getOriginalFilename()).orElse("未命名文件"));
+                } else {
+                    failedFiles.add(Optional.ofNullable(file.getOriginalFilename()).orElse("未命名文件"));
+                }
+            } catch (Exception e) {
+                failedFiles.add(Optional.ofNullable(file.getOriginalFilename()).orElse("未命名文件"));
+            }
+        }
+        Map<String,Object> data = new LinkedHashMap<>();
+        data.put("successCount", uploadedFiles.size());
+        data.put("failedCount", failedFiles.size());
+        data.put("uploadedFiles", uploadedFiles);
+        data.put("failedFiles", failedFiles);
+        return Result.success(data);
     }
 
     @DeleteMapping("/{id}")
@@ -259,7 +363,13 @@ public class DigitalResourceController {
     public Result batchDelete(@RequestBody Map<String,Object> body) {
         @SuppressWarnings("unchecked")
         List<Integer> ids = (List<Integer>) body.get("resourceIds");
-        if (ids != null) for (Integer id : ids) { mapper.softDelete(id.longValue()); }
+        if (ids != null) {
+            for (Integer id : ids) {
+                if (id == null) continue;
+                mapper.softDelete(id.longValue());
+                mapper.logOp(id.longValue(), "batch_delete", "批量删除资源");
+            }
+        }
         return Result.success();
     }
 
@@ -278,14 +388,17 @@ public class DigitalResourceController {
         @Select("SELECT COALESCE(SUM(file_size),0) FROM digital_resource WHERE deleted=0")
         Long sumStorage(@Param("p") Map<String,Object> p);
 
-        @Select("<script>SELECT id,resource_code AS resourceCode,resource_name AS resourceName,original_file_name AS originalFileName,resource_type AS resourceType,source_module AS sourceModule,file_extension AS fileExtension,file_size AS fileSize,thumbnail_url AS thumbnailUrl,resource_status AS resourceStatus,data_status AS dataStatus,current_version AS currentVersion,version_count AS versionCount,uploaded_by AS uploadedBy,upload_time AS uploadTime,update_time AS updateTime FROM digital_resource WHERE deleted=#{deleted} <if test='keyword!=null and keyword!=\"\"'> AND (resource_code LIKE CONCAT('%',#{keyword},'%') OR resource_name LIKE CONCAT('%',#{keyword},'%') OR original_file_name LIKE CONCAT('%',#{keyword},'%'))</if> <if test='resourceType!=null and resourceType!=\"\"'> AND resource_type=#{resourceType}</if> <if test='sourceModule!=null and sourceModule!=\"\"'> AND source_module=#{sourceModule}</if> <if test='resourceStatus!=null and resourceStatus!=\"\"'> AND resource_status=#{resourceStatus}</if> <if test='dataStatus!=null and dataStatus!=\"\"'> AND data_status=#{dataStatus}</if> ORDER BY update_time DESC LIMIT #{offset},#{pageSize}</script>")
-        List<Map<String,Object>> list(String keyword, String resourceType, String sourceModule, String resourceStatus, String dataStatus, boolean deleted, int offset, int pageSize);
+        @Select("<script>SELECT id,resource_code AS resourceCode,resource_name AS resourceName,original_file_name AS originalFileName,resource_type AS resourceType,source_module AS sourceModule,file_extension AS fileExtension,file_size AS fileSize,COALESCE(NULLIF(thumbnail_url,''),CASE WHEN resource_type='image' THEN file_url ELSE NULL END) AS thumbnailUrl,resource_status AS resourceStatus,data_status AS dataStatus,current_version AS currentVersion,version_count AS versionCount,uploaded_by AS uploadedBy,upload_time AS uploadTime,update_time AS updateTime FROM digital_resource WHERE deleted=#{deleted} <if test='documentOnly'> AND resource_type IN ('document','report','spreadsheet')</if> <if test='keyword!=null and keyword!=\"\"'> AND (resource_code LIKE CONCAT('%',#{keyword},'%') OR resource_name LIKE CONCAT('%',#{keyword},'%') OR original_file_name LIKE CONCAT('%',#{keyword},'%'))</if> <if test='resourceType!=null and resourceType!=\"\"'> AND resource_type=#{resourceType}</if> <if test='sourceModule!=null and sourceModule!=\"\"'> AND source_module=#{sourceModule}</if> <if test='resourceStatus!=null and resourceStatus!=\"\"'> AND resource_status=#{resourceStatus}</if> <if test='dataStatus!=null and dataStatus!=\"\"'> AND data_status=#{dataStatus}</if> ORDER BY update_time DESC LIMIT #{offset},#{pageSize}</script>")
+        List<Map<String,Object>> list(String keyword, String resourceType, String sourceModule, String resourceStatus, String dataStatus, boolean deleted, boolean documentOnly, int offset, int pageSize);
 
-        @Select("<script>SELECT COUNT(*) FROM digital_resource WHERE deleted=#{deleted} <if test='keyword!=null and keyword!=\"\"'> AND (resource_code LIKE CONCAT('%',#{keyword},'%') OR resource_name LIKE CONCAT('%',#{keyword},'%') OR original_file_name LIKE CONCAT('%',#{keyword},'%'))</if> <if test='resourceType!=null and resourceType!=\"\"'> AND resource_type=#{resourceType}</if> <if test='sourceModule!=null and sourceModule!=\"\"'> AND source_module=#{sourceModule}</if> <if test='resourceStatus!=null and resourceStatus!=\"\"'> AND resource_status=#{resourceStatus}</if> <if test='dataStatus!=null and dataStatus!=\"\"'> AND data_status=#{dataStatus}</if></script>")
-        long count(String keyword, String resourceType, String sourceModule, String resourceStatus, String dataStatus, boolean deleted);
+        @Select("<script>SELECT COUNT(*) FROM digital_resource WHERE deleted=#{deleted} <if test='documentOnly'> AND resource_type IN ('document','report','spreadsheet')</if> <if test='keyword!=null and keyword!=\"\"'> AND (resource_code LIKE CONCAT('%',#{keyword},'%') OR resource_name LIKE CONCAT('%',#{keyword},'%') OR original_file_name LIKE CONCAT('%',#{keyword},'%'))</if> <if test='resourceType!=null and resourceType!=\"\"'> AND resource_type=#{resourceType}</if> <if test='sourceModule!=null and sourceModule!=\"\"'> AND source_module=#{sourceModule}</if> <if test='resourceStatus!=null and resourceStatus!=\"\"'> AND resource_status=#{resourceStatus}</if> <if test='dataStatus!=null and dataStatus!=\"\"'> AND data_status=#{dataStatus}</if></script>")
+        long count(String keyword, String resourceType, String sourceModule, String resourceStatus, String dataStatus, boolean deleted, boolean documentOnly);
 
         @Select("SELECT * FROM digital_resource WHERE id=#{id}")
         Map<String,Object> detail(Long id);
+
+        @Select("SELECT original_file_name AS originalFileName,file_url AS fileUrl FROM digital_resource WHERE id=#{id} AND deleted=0")
+        Map<String,Object> downloadInfo(Long id);
 
         @Insert("INSERT INTO digital_resource (resource_code,resource_name,title,original_file_name,resource_type,source_module,file_extension,file_size,file_url,thumbnail_url,preview_url,resource_status,data_status,current_version,version_count,uploaded_by,upload_time,update_time,description,keywords,deleted) VALUES (#{p.resourceCode},#{p.resourceName},#{p.title},#{p.originalFileName},#{p.resourceType},#{p.sourceModule},#{p.fileExtension},#{p.fileSize},#{p.fileUrl},#{p.thumbnailUrl},#{p.previewUrl},#{p.resourceStatus},#{p.dataStatus},#{p.currentVersion},#{p.versionCount},#{p.uploadedBy},NOW(),NOW(),#{p.description},#{p.keywords},0)")
         void insertResource(@Param("p") Map<String,Object> p);
@@ -377,7 +490,8 @@ public class DigitalResourceController {
         if (Set.of("jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff").contains(ext)) return "image";
         if (Set.of("mp4", "mov", "avi", "mkv", "flv", "webm").contains(ext)) return "video";
         if (Set.of("mp3", "wav", "aac", "flac", "ogg").contains(ext)) return "audio";
-        if (Set.of("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf").contains(ext)) return "document";
+        if (Set.of("xls", "xlsx", "csv").contains(ext)) return "spreadsheet";
+        if (Set.of("pdf", "doc", "docx", "ppt", "pptx", "txt", "rtf").contains(ext)) return "document";
         if (Set.of("obj", "fbx", "gltf", "glb", "stl", "ply", "3ds").contains(ext)) return "model_3d";
         return "other";
     }

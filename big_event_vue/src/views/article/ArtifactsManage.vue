@@ -126,6 +126,7 @@ const artifactsList = async () => {
         material1: searchParams.value.material1,
         excavationRelic: searchParams.value.excavationRelic,
         completeness: searchParams.value.completeness,
+        keyword: searchKeyword.value.trim(),
     }
     const result = await artifactsListService(params)
     artifacts.value = result.data.items || []
@@ -145,9 +146,6 @@ const handleReset = () => {
 
 // 搜索框回车触发
 const handleSearchEnter = () => {
-    // 关键词同时匹配名称和编号
-    searchParams.value.newArtifactName = searchKeyword.value
-    searchParams.value.newArtifactCode = searchKeyword.value
     handleFilterChange()
 }
 

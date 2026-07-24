@@ -10,6 +10,7 @@ const instance = axios.create({baseURL})
 
 //添加请求拦截器
 import { useTokenStore } from '@/stores/token.js';
+import useUserInfoStore from '@/stores/userInfo.js';
 //添加请求拦截器
 instance.interceptors.request.use(
     (config)=>{
@@ -48,8 +49,11 @@ instance.interceptors.response.use(
         //判断相应状态码，如果为401则证明未登录，提示请登录，并跳转到登录页面
         if(err.response?.status===401)
         {
-            ElMessage.error('请先登录')
-            router.push('/Login')
+            const tokenStore = useTokenStore()
+            tokenStore.removeToken()
+            useUserInfoStore().removeInfo()
+            ElMessage.error('登录已失效，请重新登录')
+            router.replace('/Login')
         }else{
             ElMessage.error('服务异常')
         }

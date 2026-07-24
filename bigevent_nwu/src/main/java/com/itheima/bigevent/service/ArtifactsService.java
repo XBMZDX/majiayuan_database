@@ -14,5 +14,5 @@ public interface ArtifactsService {
     // 修改文物信息
     void update(artifacts artifact);
     // 分页查询文物列表
-    PageBean<artifacts> list(Integer pageNum, Integer pageSize, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
+    PageBean<artifacts> list(Integer pageNum, Integer pageSize, String keyword, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
 }

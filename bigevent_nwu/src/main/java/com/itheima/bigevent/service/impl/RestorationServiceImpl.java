@@ -3,6 +3,7 @@ package com.itheima.bigevent.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.*;
+import com.itheima.bigevent.utils.ConservationOssStorage;
 import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.*;
@@ -109,20 +110,22 @@ public class RestorationServiceImpl implements RestorationService {
         requireResult(resultId);
         validateFile(file, 50L * 1024 * 1024, Set.of("image/", "video/"), "成果媒体仅支持图片或视频");
         try {
+            Map<String, String> stored = ConservationOssStorage.upload("restoration-media", file);
             var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO conservation_restoration_media
                 (result_id,source_business_type,source_business_id,media_stage,media_type,
-                 original_name,content_type,file_size,file_data,title,description,is_primary,
+                 original_name,content_type,file_size,file_url,oss_object_key,title,description,is_primary,
                  selected_for_archive,selected_as_monitoring_baseline,sort_order)
                 VALUES (:resultId,'restoration',:resultId,:mediaStage,:mediaType,
-                 :fileName,:contentType,:fileSize,:fileData,:title,:description,:isPrimary,
+                 :fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,:title,:description,:isPrimary,
                  :selectedForArchive,:selectedAsMonitoringBaseline,:sortOrder)
                 """, new MapSqlParameterSource("resultId", resultId)
                 .addValue("mediaStage", metadata.getOrDefault("mediaStage", "final"))
                 .addValue("mediaType", metadata.getOrDefault("mediaType", "image"))
                 .addValue("fileName", file.getOriginalFilename()).addValue("contentType", file.getContentType())
-                .addValue("fileSize", file.getSize()).addValue("fileData", file.getBytes())
+                .addValue("fileSize", file.getSize()).addValue("fileUrl", stored.get("fileUrl"))
+                .addValue("ossObjectKey", stored.get("objectKey"))
                 .addValue("title", metadata.getOrDefault("title", file.getOriginalFilename()))
                 .addValue("description", metadata.get("description"))
                 .addValue("isPrimary", bool(metadata.get("isPrimary")))
@@ -131,14 +134,14 @@ public class RestorationServiceImpl implements RestorationService {
                 .addValue("sortOrder", integer(metadata.get("sortOrder"))), key, new String[]{"id"});
             return mediaMetadata(key.getKey().longValue());
         } catch (Exception e) {
-            throw new IllegalStateException("复原成果媒体写入MySQL失败", e);
+            throw new IllegalStateException("复原成果媒体上传到 OSS 失败", e);
         }
     }
 
     @Override
     public Map<String, Object> getMedia(Long mediaId) {
         Map<String, Object> media = one("""
-            SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,
+            SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl,
                    source_business_type AS sourceBusinessType,source_media_id AS sourceMediaId
             FROM conservation_restoration_media WHERE id=?
             """, mediaId);
@@ -147,11 +150,11 @@ public class RestorationServiceImpl implements RestorationService {
         if (sourceId == null) return media;
         return switch (text(media.get("sourceBusinessType"))) {
             case "process_step" -> one("""
-                SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData
+                SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl
                 FROM conservation_process_media WHERE id=?
                 """, sourceId);
             case "comparison" -> one("""
-                SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData
+                SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl
                 FROM conservation_comparison_media WHERE id=?
                 """, sourceId);
             default -> media;
@@ -176,20 +179,22 @@ public class RestorationServiceImpl implements RestorationService {
             if (!Set.of("GLB", "GLTF", "OBJ", "FBX", "STL", "PLY").contains(format)) {
                 throw new IllegalArgumentException("WebGL查看器仅支持GLB、GLTF、OBJ、FBX、STL和PLY模型");
             }
+            Map<String, String> stored = ConservationOssStorage.upload("restoration-models", file);
             var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO conservation_restoration_model
-                (result_id,model_name,model_type,original_name,content_type,file_size,file_data,
+                (result_id,model_name,model_type,original_name,content_type,file_size,file_url,oss_object_key,
                  file_format,scale_unit,coordinate_system,polygon_count,texture_count,model_stage,
                  model_description,supports_layer,supports_annotation,is_primary)
-                VALUES (:resultId,:modelName,:modelType,:fileName,:contentType,:fileSize,:fileData,
+                VALUES (:resultId,:modelName,:modelType,:fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,
                  :fileFormat,:scaleUnit,:coordinateSystem,:polygonCount,:textureCount,:modelStage,
                  :modelDescription,:supportsLayer,:supportsAnnotation,:isPrimary)
                 """, new MapSqlParameterSource("resultId", resultId)
                 .addValue("modelName", metadata.getOrDefault("modelName", name))
                 .addValue("modelType", metadata.getOrDefault("modelType", "restored"))
                 .addValue("fileName", name).addValue("contentType", file.getContentType())
-                .addValue("fileSize", file.getSize()).addValue("fileData", file.getBytes())
+                .addValue("fileSize", file.getSize()).addValue("fileUrl", stored.get("fileUrl"))
+                .addValue("ossObjectKey", stored.get("objectKey"))
                 .addValue("fileFormat", metadata.getOrDefault("fileFormat", format))
                 .addValue("scaleUnit", metadata.get("scaleUnit"))
                 .addValue("coordinateSystem", metadata.get("coordinateSystem"))
@@ -202,14 +207,14 @@ public class RestorationServiceImpl implements RestorationService {
                 .addValue("isPrimary", bool(metadata.get("isPrimary"))), key, new String[]{"id"});
             return modelMetadata(key.getKey().longValue());
         } catch (Exception e) {
-            throw new IllegalStateException("三维模型写入MySQL失败", e);
+            throw new IllegalStateException("三维模型上传到 OSS 失败", e);
         }
     }
 
     @Override
     public Map<String, Object> getModel(Long modelId) {
         return one("""
-            SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData
+            SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl
             FROM conservation_restoration_model WHERE id=?
             """, modelId);
     }
@@ -333,10 +338,12 @@ public class RestorationServiceImpl implements RestorationService {
         Map<Long, Map<String, Object>> oldMedia = byId(jdbc.query("""
             SELECT id,source_media_id AS sourceMediaId,source_business_type AS sourceBusinessType,
                    source_business_id AS sourceBusinessId,original_name AS fileName,content_type AS contentType,
-                   file_size AS fileSize,file_data AS fileData FROM conservation_restoration_media WHERE result_id=?
+                   file_size AS fileSize,file_url AS fileUrl,oss_object_key AS ossObjectKey,
+                   file_data AS fileData FROM conservation_restoration_media WHERE result_id=?
             """, this::camelMap, id));
         Map<Long, Map<String, Object>> oldModels = byId(jdbc.query("""
-            SELECT id,original_name AS fileName,content_type AS contentType,file_size AS fileSize,file_data AS fileData
+            SELECT id,original_name AS fileName,content_type AS contentType,file_size AS fileSize,
+                   file_url AS fileUrl,oss_object_key AS ossObjectKey,file_data AS fileData
             FROM conservation_restoration_model WHERE result_id=?
             """, this::camelMap, id));
         jdbc.update("DELETE FROM conservation_restoration_source WHERE result_id=?", id);
@@ -401,14 +408,16 @@ public class RestorationServiceImpl implements RestorationService {
         namedJdbc.update("""
             INSERT INTO conservation_restoration_media
             (id,result_id,part_id,source_media_id,source_business_type,source_business_id,media_stage,
-             media_type,original_name,content_type,file_size,file_data,title,description,is_primary,
+             media_type,original_name,content_type,file_size,file_url,oss_object_key,file_data,title,description,is_primary,
              selected_for_archive,selected_as_monitoring_baseline,sort_order)
             VALUES (:id,:resultId,:restorationPartId,:sourceMediaId,:sourceBusinessType,:sourceBusinessId,
-             :mediaStage,:mediaType,:fileName,:contentType,:fileSize,:fileData,:title,:description,
+             :mediaStage,:mediaType,:fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,:fileData,:title,:description,
              :isPrimary,:selectedForArchive,:selectedAsMonitoringBaseline,:sortOrder)
             """, params(media).addValue("resultId", resultId)
             .addValue("contentType", old == null ? null : old.get("contentType"))
             .addValue("fileSize", old == null ? null : old.get("fileSize"))
+            .addValue("fileUrl", old == null ? null : old.get("fileUrl"))
+            .addValue("ossObjectKey", old == null ? null : old.get("ossObjectKey"))
             .addValue("fileData", old == null ? null : old.get("fileData"))
             .addValue("fileName", value(media.get("fileName"), old == null ? null : old.get("fileName"))));
     }
@@ -416,15 +425,17 @@ public class RestorationServiceImpl implements RestorationService {
     private void insertModel(Long resultId, Map<String, Object> model, Map<String, Object> old) {
         namedJdbc.update("""
             INSERT INTO conservation_restoration_model
-            (id,result_id,model_name,model_type,original_name,content_type,file_size,file_data,file_format,
+            (id,result_id,model_name,model_type,original_name,content_type,file_size,file_url,oss_object_key,file_data,file_format,
              scale_unit,coordinate_system,polygon_count,texture_count,model_stage,model_description,
              supports_layer,supports_annotation,is_primary)
-            VALUES (:id,:resultId,:modelName,:modelType,:fileName,:contentType,:fileSize,:fileData,:fileFormat,
+            VALUES (:id,:resultId,:modelName,:modelType,:fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,:fileData,:fileFormat,
              :scaleUnit,:coordinateSystem,:polygonCount,:textureCount,:modelStage,:modelDescription,
              :supportsLayer,:supportsAnnotation,:isPrimary)
             """, params(model).addValue("resultId", resultId)
             .addValue("contentType", old == null ? null : old.get("contentType"))
             .addValue("fileSize", old == null ? model.get("fileSize") : old.get("fileSize"))
+            .addValue("fileUrl", old == null ? null : old.get("fileUrl"))
+            .addValue("ossObjectKey", old == null ? null : old.get("ossObjectKey"))
             .addValue("fileData", old == null ? null : old.get("fileData"))
             .addValue("fileName", value(model.get("fileName"), old == null ? null : old.get("fileName"))));
     }
@@ -510,8 +521,8 @@ public class RestorationServiceImpl implements RestorationService {
                    media_stage AS mediaStage,media_type AS mediaType,original_name AS fileName,
                    title,description,is_primary AS isPrimary,selected_for_archive AS selectedForArchive,
                    selected_as_monitoring_baseline AS selectedAsMonitoringBaseline,sort_order AS sortOrder,
-                   CONCAT('/api/conservation/restoration-media/',id,'/content') AS fileUrl,
-                   CONCAT('/api/conservation/restoration-media/',id,'/content') AS thumbnailUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-media/',id,'/content')) AS fileUrl,
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-media/',id,'/content')) AS thumbnailUrl
             FROM conservation_restoration_media WHERE result_id=? ORDER BY sort_order,id
             """, this::camelMap, id);
         result.put("media", media);
@@ -522,7 +533,7 @@ public class RestorationServiceImpl implements RestorationService {
                    texture_count AS textureCount,model_stage AS modelStage,
                    model_description AS modelDescription,supports_layer AS supportsLayer,
                    supports_annotation AS supportsAnnotation,is_primary AS isPrimary,
-                   CONCAT('/api/conservation/restoration-models/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-models/',id,'/content')) AS fileUrl
             FROM conservation_restoration_model WHERE result_id=? ORDER BY id
             """, this::camelMap, id));
         result.put("versions", jdbc.query("""
@@ -583,7 +594,7 @@ public class RestorationServiceImpl implements RestorationService {
             summaries.add(mapOf("id", result.get("id"), "name", result.get("resultName"),
                 "type", result.get("restorationType"), "status", result.get("resultStatus"),
                 "confidence", result.get("confidenceLevel"),
-                "image", primaryMedia == null ? "" : "/api/conservation/restoration-media/" + primaryMedia.get("id") + "/content",
+                "image", primaryMedia == null ? "" : text(primaryMedia.get("fileUrl")),
                 "model", primaryModel == null ? "" : primaryModel.get("fileName"),
                 "version", result.get("currentVersion"), "description",
                 value(map(result.get("evaluation")) == null ? null : map(result.get("evaluation")).get("finalConclusion"),
@@ -601,8 +612,8 @@ public class RestorationServiceImpl implements RestorationService {
                    media_stage AS mediaStage,media_type AS mediaType,original_name AS fileName,
                    title,description,is_primary AS isPrimary,selected_for_archive AS selectedForArchive,
                    selected_as_monitoring_baseline AS selectedAsMonitoringBaseline,sort_order AS sortOrder,
-                   CONCAT('/api/conservation/restoration-media/',id,'/content') AS fileUrl,
-                   CONCAT('/api/conservation/restoration-media/',id,'/content') AS thumbnailUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-media/',id,'/content')) AS fileUrl,
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-media/',id,'/content')) AS thumbnailUrl
             FROM conservation_restoration_media WHERE id=?
             """, id);
     }
@@ -615,7 +626,7 @@ public class RestorationServiceImpl implements RestorationService {
                    texture_count AS textureCount,model_stage AS modelStage,
                    model_description AS modelDescription,supports_layer AS supportsLayer,
                    supports_annotation AS supportsAnnotation,is_primary AS isPrimary,
-                   CONCAT('/api/conservation/restoration-models/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/restoration-models/',id,'/content')) AS fileUrl
             FROM conservation_restoration_model WHERE id=?
             """, id);
     }

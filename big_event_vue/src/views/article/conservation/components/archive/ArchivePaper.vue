@@ -12,6 +12,7 @@ import {
 const props = defineProps({
     activeSection: { type: String, required: true },
     project: { type: Object, required: true },
+    artifact: { type: Object, default: null },
     archive: { type: Object, required: true },
     sections: { type: Array, default: () => [] },
     workspace: { type: Object, required: true }
@@ -29,20 +30,45 @@ const severityMap = {
     critical: ['危急', 'danger']
 }
 const riskMap = { low: '低风险', medium: '中风险', high: '高风险' }
+const preservationStatusMap = { good: '良好', fair: '一般', poor: '较差', critical: '危急' }
+const structuralStabilityMap = {
+    stable: '稳定', partially_unstable: '局部不稳定', unstable: '整体不稳定', dangerous: '危险'
+}
+const developmentStatusMap = { stable: '稳定', slowly_developing: '缓慢发展', rapidly_developing: '快速发展' }
+const structuralImpactMap = { none: '无明显影响', local: '局部影响', overall: '整体影响' }
+const displayMappedValue = (value, map) => map[value] || value || '-'
+const riskTagType = value => ({ low: 'success', medium: 'warning', high: 'danger' }[value] || 'info')
 const projectStatusMap = { draft: '草稿', active: '进行中', completed: '已完成', suspended: '暂停', archived: '已归档' }
 const stageMap = {
     pendingSurvey: '待调查', disease: '病害调查', planning: '方案制定', protection: '保护处理中',
     repair: '修复处理中', restoration: '复原处理中', evaluation: '效果评估', monitoring: '后续监测'
 }
 
-const projectInfo = computed(() => [
-    ['文物编号', props.project.artifactCode], ['文物名称', props.project.artifactName],
-    ['文物类别', props.project.artifactCategory], ['材质', props.project.material],
-    ['时代', props.project.era], ['出土地点', props.project.excavationLocation],
-    ['所属墓葬', props.project.tombCode], ['遗迹单位', props.project.relicUnit],
-    ['文物级别', props.project.artifactLevel], ['收藏单位', props.project.collectionUnit],
-    ['提取日期', props.project.extractionDate]
-])
+const artifactInfo = computed(() => {
+    const artifact = props.artifact || {}
+    return [
+        ['文物编号', artifact.artifactCode || props.project.artifactCode],
+        ['文物名称', artifact.artifactName || props.project.artifactName],
+        ['材质', artifact.material],
+        ['完整度', artifact.completeness],
+        ['文物描述', artifact.artifactDescription],
+        ['数量 1', artifact.quantity1],
+        ['数量 2', artifact.quantity2],
+        ['尺寸', artifact.dimensions],
+        ['重量', artifact.weight],
+        ['出土遗迹', artifact.excavationRelic],
+        ['出土位置', artifact.excavationPosition],
+        ['出土时间', artifact.excavationTime],
+        ['存放方式', artifact.storageMethod],
+        ['流转过程', artifact.transferProcess],
+        ['修复、复原情况', artifact.restorationStatus],
+        ['摄影者', artifact.photographer],
+        ['绘图者', artifact.draftsperson],
+        ['文字描述者', artifact.textDescriber],
+        ['定级情况', artifact.gradingStatus],
+        ['备注', artifact.notes]
+    ]
+})
 const conservationProjectInfo = computed(() => [
     ['项目编号', props.project.projectCode], ['项目名称', props.project.projectName],
     ['项目类型', props.project.projectType === 'comprehensive' ? '综合保护修复' : props.project.projectType],
@@ -225,8 +251,8 @@ const deleteAttachment = async row => {
     ElMessage.success('附件已删除')
 }
 const openAttachment = async (row, download = false) => {
-    const response = await getArchiveAttachmentContent(row.id)
-    const url = URL.createObjectURL(response.data)
+    const response = row.fileUrl ? null : await getArchiveAttachmentContent(row.id)
+    const url = row.fileUrl || URL.createObjectURL(response.data)
     if (download) {
         const link = document.createElement('a')
         link.href = url
@@ -235,7 +261,7 @@ const openAttachment = async (row, download = false) => {
     } else {
         window.open(url, '_blank')
     }
-    setTimeout(() => URL.revokeObjectURL(url), 60000)
+    if (!row.fileUrl) setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 const detectionDialogVisible = ref(false)
@@ -353,10 +379,20 @@ const generateMonitoringAdvice = () => {
             </div>
             <div class="info-layout">
                 <div class="artifact-photo">
-                    <div class="photo-placeholder">M45-C1<br><small>文物整体照片</small></div>
+                    <el-image
+                        v-if="artifact?.coverImageUrl"
+                        :src="artifact.coverImageUrl"
+                        :preview-src-list="[artifact.coverImageUrl]"
+                        fit="cover"
+                        class="artifact-cover"
+                    />
+                    <div v-else class="photo-placeholder">
+                        {{ artifact?.artifactCode || project.artifactCode || '暂无照片' }}
+                        <small>{{ artifact ? '文物总览中暂未设置封面照片' : '当前项目未关联文物总览' }}</small>
+                    </div>
                 </div>
                 <dl class="info-grid">
-                    <div v-for="item in projectInfo" :key="item[0]"><dt>{{ item[0] }}</dt><dd>{{ item[1] || '-' }}</dd></div>
+                    <div v-for="item in artifactInfo" :key="item[0]"><dt>{{ item[0] }}</dt><dd>{{ item[1] || '-' }}</dd></div>
                 </dl>
             </div>
             <el-divider />
@@ -385,9 +421,14 @@ const generateMonitoringAdvice = () => {
                 <div><dt>调查日期</dt><dd>{{ workspace.survey.surveyDate }}</dd></div>
                 <div><dt>调查人员</dt><dd>{{ workspace.survey.surveyor }}</dd></div>
                 <div><dt>调查地点</dt><dd>{{ workspace.survey.surveyLocation }}</dd></div>
-                <div><dt>整体保存状态</dt><dd>{{ workspace.survey.preservationStatus }}</dd></div>
-                <div><dt>结构稳定性</dt><dd>{{ workspace.survey.structuralStability }}</dd></div>
-                <div><dt>综合风险</dt><dd><el-tag type="danger">{{ riskMap[workspace.survey.overallRisk] }}</el-tag></dd></div>
+                <div><dt>整体保存状态</dt><dd>{{ displayMappedValue(workspace.survey.preservationStatus, preservationStatusMap) }}</dd></div>
+                <div><dt>结构稳定性</dt><dd>{{ displayMappedValue(workspace.survey.structuralStability, structuralStabilityMap) }}</dd></div>
+                <div><dt>综合风险</dt><dd>
+                    <el-tag v-if="workspace.survey.overallRiskLevel" :type="riskTagType(workspace.survey.overallRiskLevel)">
+                        {{ displayMappedValue(workspace.survey.overallRiskLevel, riskMap) }}
+                    </el-tag>
+                    <span v-else>-</span>
+                </dd></div>
                 <div><dt>引用版本</dt><dd>{{ archive.sourceSurveyVersion }}</dd></div>
             </dl>
             <div class="read-block"><label>保存环境摘要</label><p>{{ workspace.survey.environmentSummary }}</p></div>
@@ -418,10 +459,10 @@ const generateMonitoringAdvice = () => {
                 <div v-if="selectedDisease" class="disease-detail">
                     <div class="section-heading"><div><h3>{{ selectedDisease.diseaseName }}</h3><p>{{ selectedDisease.positionDescription }}</p></div><el-tag v-if="selectedDisease.emergency" type="danger">需优先处置</el-tag></div>
                     <dl class="detail-list">
-                        <div><dt>发展状态</dt><dd>{{ selectedDisease.developmentStatus }}</dd></div>
+                        <div><dt>发展状态</dt><dd>{{ displayMappedValue(selectedDisease.developmentStatus, developmentStatusMap) }}</dd></div>
                         <div><dt>影响范围</dt><dd>{{ selectedDisease.extentValue }}{{ selectedDisease.extentUnit }}</dd></div>
                         <div><dt>形态特征</dt><dd>{{ selectedDisease.morphology }}</dd></div>
-                        <div><dt>结构影响</dt><dd>{{ selectedDisease.structuralImpact }}</dd></div>
+                        <div><dt>结构影响</dt><dd>{{ displayMappedValue(selectedDisease.structuralImpact, structuralImpactMap) }}</dd></div>
                         <div><dt>成因分析</dt><dd>{{ selectedDisease.causeAnalysis }}</dd></div>
                         <div><dt>初步建议</dt><dd>{{ selectedDisease.recommendedAction }}</dd></div>
                     </dl>
@@ -935,6 +976,7 @@ const generateMonitoringAdvice = () => {
 .subsection-title h4 { font-size: 14px; }
 .info-layout { display: flex; gap: 28px; }
 .artifact-photo { flex: none; width: 190px; }
+.artifact-cover { display: block; width: 190px; height: 180px; border-radius: 8px; overflow: hidden; }
 .photo-placeholder { height: 180px; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #637282; background: linear-gradient(145deg, #e9eef2, #cfd9df); border-radius: 8px; font-size: 24px; font-weight: 700; }
 .photo-placeholder small { margin-top: 8px; font-size: 11px; font-weight: 400; }
 .info-grid { min-width: 0; display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 25px; margin: 0; }
@@ -1005,6 +1047,7 @@ const generateMonitoringAdvice = () => {
     .archive-paper { padding: 28px; }
     .info-layout { flex-direction: column; }
     .artifact-photo { width: 100%; }
+    .artifact-cover { width: 100%; height: 230px; }
     .photo-placeholder { height: 150px; }
     .material-note { grid-template-columns: 1fr; }
 }

@@ -17,7 +17,7 @@ public class AliOssUtil
     // Endpoint以华东1（杭州）为例，其它Region请按实际情况填写。
     private static final String endpoint = "https://oss-cn-beijing.aliyuncs.com";
 
-     public static String uploadFile(String objectName,InputStream in) throws Exception
+    public static String uploadFile(String objectName,InputStream in) throws Exception
     {
         
        // 从环境变量/系统属性读取 OSS 凭证
@@ -72,5 +72,26 @@ public class AliOssUtil
         }
 
         return url;
+    }
+
+    /** 删除 OSS 对象；对象不存在时 OSS 的删除操作仍可安全执行。 */
+    public static void deleteFile(String objectName) throws Exception {
+        if (objectName == null || objectName.isBlank()) return;
+        String ak = OSSConfig.getAccessKeyId();
+        String sk = OSSConfig.getAccessKeySecret();
+        DefaultCredentialProvider credentialsProvider = new DefaultCredentialProvider(ak, sk);
+        ClientBuilderConfiguration configuration = new ClientBuilderConfiguration();
+        configuration.setSignatureVersion(SignVersion.V4);
+        OSS ossClient = OSSClientBuilder.create()
+            .endpoint(endpoint)
+            .credentialsProvider(credentialsProvider)
+            .clientConfiguration(configuration)
+            .region(region)
+            .build();
+        try {
+            ossClient.deleteObject(bucketName, objectName);
+        } finally {
+            ossClient.shutdown();
+        }
     }
 }

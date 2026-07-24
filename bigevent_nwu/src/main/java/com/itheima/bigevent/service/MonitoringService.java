@@ -11,6 +11,10 @@ public interface MonitoringService {
     Map<String, Object> createProject(Map<String, Object> data);
     void updateProject(Long projectId, Map<String, Object> data);
     void deleteProject(Long projectId);
+    Map<String, Object> getQuickRecord(Long projectId);
+    Map<String, Object> saveQuickRecord(Long projectId, Map<String, Object> data);
+    Map<String, Object> uploadQuickRecordMedia(Long projectId, MultipartFile file, Map<String, String> metadata);
+    void deleteQuickRecordMedia(Long mediaId);
     List<Map<String, Object>> searchArtifacts(String keyword);
     Map<String, Object> getSources(Long projectId);
     List<Map<String, Object>> getPlans(Long projectId);

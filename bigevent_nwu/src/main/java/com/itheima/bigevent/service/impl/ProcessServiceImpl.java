@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.ArchiveService;
 import com.itheima.bigevent.service.ProcessService;
+import com.itheima.bigevent.utils.ConservationOssStorage;
 import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -196,19 +197,21 @@ public class ProcessServiceImpl implements ProcessService {
         Map<String, Object> step = one("SELECT process_id AS processId,project_id AS projectId FROM conservation_process_step WHERE id=?", stepId);
         if (step == null) throw new IllegalArgumentException("修复步骤不存在，请先保存步骤");
         try {
+            Map<String, String> stored = ConservationOssStorage.upload("process-media", file);
             var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO conservation_process_media
-                (process_id,step_id,project_id,media_stage,original_name,content_type,file_size,file_data,
+                (process_id,step_id,project_id,media_stage,original_name,content_type,file_size,file_url,oss_object_key,
                  title,shooting_time,shooting_position,target_part,photographer,description,
                  selected_for_comparison,selected_for_archive,selected_for_restoration)
-                VALUES (:processId,:stepId,:projectId,:mediaStage,:originalName,:contentType,:fileSize,:fileData,
+                VALUES (:processId,:stepId,:projectId,:mediaStage,:originalName,:contentType,:fileSize,:fileUrl,:ossObjectKey,
                  :title,:shootingTime,:shootingPosition,:targetPart,:photographer,:description,
                  :selectedForComparison,:selectedForArchive,:selectedForRestoration)
                 """, new MapSqlParameterSource(step).addValue("stepId", stepId)
                 .addValue("mediaStage", metadata.get("mediaStage"))
                 .addValue("originalName", file.getOriginalFilename()).addValue("contentType", contentType)
-                .addValue("fileSize", file.getSize()).addValue("fileData", file.getBytes())
+                .addValue("fileSize", file.getSize()).addValue("fileUrl", stored.get("fileUrl"))
+                .addValue("ossObjectKey", stored.get("objectKey"))
                 .addValue("title", metadata.get("title")).addValue("shootingTime", dateTime(metadata.get("shootingTime")))
                 .addValue("shootingPosition", metadata.get("shootingPosition")).addValue("targetPart", metadata.get("targetPart"))
                 .addValue("photographer", metadata.get("photographer")).addValue("description", metadata.get("description"))
@@ -218,13 +221,13 @@ public class ProcessServiceImpl implements ProcessService {
                 key, new String[]{"id"});
             return mediaMetadata(key.getKey().longValue());
         } catch (Exception e) {
-            throw new IllegalStateException("过程影像写入MySQL失败", e);
+            throw new IllegalStateException("过程影像上传到 OSS 失败", e);
         }
     }
 
     @Override
     public Map<String, Object> getMedia(Long mediaId) {
-        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData FROM conservation_process_media WHERE id=?", mediaId);
+        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl FROM conservation_process_media WHERE id=?", mediaId);
     }
 
     @Override
@@ -414,7 +417,7 @@ public class ProcessServiceImpl implements ProcessService {
                    shooting_time AS shootingTime,shooting_position AS shootingPosition,target_part AS targetPart,
                    photographer,description,selected_for_comparison AS selectedForComparison,
                    selected_for_archive AS selectedForArchive,selected_for_restoration AS selectedForRestoration,
-                   CONCAT('/api/conservation/process-media/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/process-media/',id,'/content')) AS fileUrl
             FROM conservation_process_media WHERE step_id=? ORDER BY create_time,id
             """, this::camelMap, stepId);
     }
@@ -425,7 +428,7 @@ public class ProcessServiceImpl implements ProcessService {
                    shooting_time AS shootingTime,shooting_position AS shootingPosition,target_part AS targetPart,
                    photographer,description,selected_for_comparison AS selectedForComparison,
                    selected_for_archive AS selectedForArchive,selected_for_restoration AS selectedForRestoration,
-                   CONCAT('/api/conservation/process-media/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/process-media/',id,'/content')) AS fileUrl
             FROM conservation_process_media WHERE id=?
             """, id);
     }
@@ -507,8 +510,13 @@ public class ProcessServiceImpl implements ProcessService {
     }
 
     private static Long longValue(Object value) {
-        return value instanceof Number n ? n.longValue()
-            : value == null || value.toString().isBlank() ? null : Long.valueOf(value.toString());
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return Long.valueOf(number.longValue());
+        }
+        return Long.valueOf(value.toString());
     }
 
     private int intValue(Object value) {

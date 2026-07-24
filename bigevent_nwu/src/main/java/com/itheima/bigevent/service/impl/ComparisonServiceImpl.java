@@ -46,9 +46,25 @@ public class ComparisonServiceImpl implements ComparisonService {
             : archiveWorkspace.getOrDefault("diseaseRecords", List.of()));
         result.put("sourceMedia", sourceMedia(projectId));
         List<Map<String, Object>> groups = jdbc.query("""
-            SELECT comparison_json AS comparisonJson FROM conservation_comparison
+            SELECT id,comparison_json AS comparisonJson FROM conservation_comparison
             WHERE project_id=? ORDER BY update_time DESC,id DESC
-            """, (rs, rowNum) -> jsonMap(rs.getObject("comparisonJson")), projectId);
+            """, (rs, rowNum) -> {
+                Map<String, Object> group = jsonMap(rs.getObject("comparisonJson"));
+                Long comparisonId = rs.getLong("id");
+                group.put("id", comparisonId);
+                Map<Long, Map<String, Object>> mediaById = new HashMap<>();
+                for (Map<String, Object> media : comparisonMedia(comparisonId)) {
+                    mediaById.put(longValue(media.get("id")), media);
+                }
+                for (Map<String, Object> image : list(group.get("images"))) {
+                    Map<String, Object> media = mediaById.get(longValue(image.get("id")));
+                    if (media != null) {
+                        image.put("fileUrl", media.get("fileUrl"));
+                        image.put("thumbnailUrl", media.get("fileUrl"));
+                    }
+                }
+                return group;
+            }, projectId);
         result.put("groups", groups);
         return result;
     }
@@ -123,7 +139,8 @@ public class ComparisonServiceImpl implements ComparisonService {
         Long id = longValue(image.get("id"));
         Long sourceId = longValue(image.get("sourceMediaId"));
         Map<String, Object> source = sourceId == null ? null : one("""
-            SELECT original_name AS fileName,content_type AS contentType,file_size AS fileSize,file_data AS fileData
+            SELECT original_name AS fileName,content_type AS contentType,file_size AS fileSize,
+                   file_url AS fileUrl,oss_object_key AS ossObjectKey,file_data AS fileData
             FROM conservation_process_media WHERE id=? AND project_id=?
             """, sourceId, projectId);
         if (sourceId != null && source == null) {
@@ -132,16 +149,18 @@ public class ComparisonServiceImpl implements ComparisonService {
         namedJdbc.update("""
             INSERT INTO conservation_comparison_media
             (id,comparison_id,source_media_id,image_stage,image_role,original_name,content_type,
-             file_size,file_data,target_part,shooting_position,shooting_time,photographer,
+             file_size,file_url,oss_object_key,file_data,target_part,shooting_position,shooting_time,photographer,
              description,sequence_no,is_primary,source_module)
             VALUES (:id,:comparisonId,:sourceMediaId,:imageStage,:imageRole,:fileName,:contentType,
-             :fileSize,:fileData,:targetPart,:shootingPosition,:shootingTime,:photographer,
+             :fileSize,:fileUrl,:ossObjectKey,:fileData,:targetPart,:shootingPosition,:shootingTime,:photographer,
              :imageDescription,:sequenceNo,:isPrimary,:sourceModule)
             """, params(image).addValue("id", id).addValue("comparisonId", comparisonId)
             .addValue("sourceMediaId", sourceId)
             .addValue("fileName", source == null ? image.get("fileName") : source.get("fileName"))
             .addValue("contentType", source == null ? null : source.get("contentType"))
             .addValue("fileSize", source == null ? null : source.get("fileSize"))
+            .addValue("fileUrl", source == null ? null : source.get("fileUrl"))
+            .addValue("ossObjectKey", source == null ? null : source.get("ossObjectKey"))
             .addValue("fileData", source == null ? null : source.get("fileData"))
             .addValue("shootingTime", dateTime(image.get("shootingTime"))));
     }
@@ -177,8 +196,8 @@ public class ComparisonServiceImpl implements ComparisonService {
             SELECT m.id,m.id AS sourceMediaId,m.process_id AS processId,m.step_id AS stepId,
                    s.step_name AS stepName,s.step_status AS stepStatus,m.media_stage AS imageStage,
                    'detail' AS imageRole,m.original_name AS fileName,
-                   CONCAT('/api/conservation/process-media/',m.id,'/content') AS fileUrl,
-                   CONCAT('/api/conservation/process-media/',m.id,'/content') AS thumbnailUrl,
+                   COALESCE(m.file_url,CONCAT('/api/conservation/process-media/',m.id,'/content')) AS fileUrl,
+                   COALESCE(m.file_url,CONCAT('/api/conservation/process-media/',m.id,'/content')) AS thumbnailUrl,
                    m.target_part AS targetPart,m.shooting_position AS shootingPosition,
                    m.shooting_time AS shootingTime,m.photographer,
                    m.description AS imageDescription,m.selected_for_comparison AS selectedForComparison,
@@ -187,6 +206,13 @@ public class ComparisonServiceImpl implements ComparisonService {
             JOIN conservation_process_step s ON s.id=m.step_id
             WHERE m.project_id=? ORDER BY m.selected_for_comparison DESC,s.sequence_no,m.create_time,m.id
             """, this::camelMap, projectId);
+    }
+
+    private List<Map<String, Object>> comparisonMedia(Long comparisonId) {
+        return jdbc.query("""
+            SELECT id,COALESCE(file_url,CONCAT('/api/conservation/comparison-media/',id,'/content')) AS fileUrl
+            FROM conservation_comparison_media WHERE comparison_id=?
+            """, this::camelMap, comparisonId);
     }
 
     private void syncArchive(Long projectId, List<Map<String, Object>> groups) {
@@ -217,7 +243,7 @@ public class ComparisonServiceImpl implements ComparisonService {
 
     private String imageUrl(List<Map<String, Object>> images, String stage) {
         return images.stream().filter(x -> stage.equals(text(x.get("imageStage"))))
-            .map(x -> "/api/conservation/comparison-media/" + x.get("id") + "/content")
+            .map(x -> text(x.get("fileUrl")))
             .findFirst().orElse("");
     }
 
@@ -281,8 +307,13 @@ public class ComparisonServiceImpl implements ComparisonService {
     }
 
     private static Long longValue(Object value) {
-        return value instanceof Number n ? n.longValue()
-            : value == null || value.toString().isBlank() ? null : Long.valueOf(value.toString());
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return Long.valueOf(number.longValue());
+        }
+        return Long.valueOf(value.toString());
     }
 
     private boolean bool(Object value) {

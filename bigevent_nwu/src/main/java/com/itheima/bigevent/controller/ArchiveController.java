@@ -75,6 +75,11 @@ public class ArchiveController {
     public ResponseEntity<byte[]> content(@PathVariable Long attachmentId) {
         Map<String, Object> attachment = service.getAttachment(attachmentId);
         if (attachment == null) return ResponseEntity.notFound().build();
+        if (attachment.get("fileData") == null && attachment.get("fileUrl") != null) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, String.valueOf(attachment.get("fileUrl"))).build();
+        }
+        if (attachment.get("fileData") == null) return ResponseEntity.notFound().build();
         String name = URLEncoder.encode(String.valueOf(attachment.get("fileName")), StandardCharsets.UTF_8)
             .replace("+", "%20");
         MediaType type;

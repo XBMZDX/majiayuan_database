@@ -47,6 +47,30 @@ public class MonitoringController {
         return Result.success();
     }
 
+    @GetMapping("/projects/{projectId}/quick-record")
+    public Result<Map<String, Object>> quickRecord(@PathVariable Long projectId) {
+        return Result.success(service.getQuickRecord(projectId));
+    }
+
+    @PutMapping("/projects/{projectId}/quick-record")
+    public Result<Map<String, Object>> saveQuickRecord(@PathVariable Long projectId,
+                                                         @RequestBody Map<String, Object> data) {
+        return Result.success(service.saveQuickRecord(projectId, data));
+    }
+
+    @PostMapping(value = "/projects/{projectId}/quick-record/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result<Map<String, Object>> uploadQuickRecordMedia(
+        @PathVariable Long projectId, @RequestPart("file") MultipartFile file,
+        @RequestParam Map<String, String> metadata) {
+        return Result.success(service.uploadQuickRecordMedia(projectId, file, metadata));
+    }
+
+    @DeleteMapping("/quick-record-media/{mediaId}")
+    public Result<Void> deleteQuickRecordMedia(@PathVariable Long mediaId) {
+        service.deleteQuickRecordMedia(mediaId);
+        return Result.success();
+    }
+
     @GetMapping("/artifacts/search")
     public Result<List<Map<String, Object>>> artifacts(@RequestParam(defaultValue = "") String keyword) {
         return Result.success(service.searchArtifacts(keyword));
@@ -141,6 +165,11 @@ public class MonitoringController {
 
     private ResponseEntity<byte[]> binary(Map<String, Object> media) {
         if (media == null) return ResponseEntity.notFound().build();
+        if (media.get("fileData") == null && media.get("fileUrl") != null) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, String.valueOf(media.get("fileUrl"))).build();
+        }
+        if (media.get("fileData") == null) return ResponseEntity.notFound().build();
         String name = java.net.URLEncoder.encode(String.valueOf(media.get("fileName")), StandardCharsets.UTF_8)
             .replace("+", "%20");
         MediaType type;

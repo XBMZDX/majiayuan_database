@@ -5,7 +5,6 @@ import {
     Promotion,
     UserFilled,
     User,
-    Crop,
     EditPen,
     SwitchButton,
     CaretBottom,
@@ -19,7 +18,7 @@ import {
 import avatar from '@/assets/default.png'
 
 //调用函数获取详细信息
-import { userInfoService } from '@/api/user.js'
+import { userInfoService, userLogoutService } from '@/api/user.js'
 //导入pinia
 import useUserInfoStore from '@/stores/userInfo.js'
 import { useTokenStore } from '@/stores/token';
@@ -72,7 +71,6 @@ const menuTitleMap = {
     '/archive/media': '图像与多媒体',
     '/archive/models': '三维模型库',
     '/user/info': '基本资料',
-    '/user/avatar': '更换头像',
     '/user/resetPassword': '重置密码'
 }
 
@@ -111,9 +109,10 @@ const handleCommand = (command) => {
             { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
         )
             .then(async () => {
+                await userLogoutService().catch(() => null)
                 tokenStore.removeToken();
                 userInfoStore.removeInfo();
-                router.push('/login')
+                router.push('/Login')
                 ElMessage({ type: 'success', message: '退出登录成功' })
             })
             .catch(() => { ElMessage({ type: 'info', message: '已取消' }) })
@@ -207,12 +206,6 @@ const handleCommand = (command) => {
                         <span>基本资料</span>
                     </el-menu-item>
 
-                    <el-menu-item index="/user/avatar">
-                        <el-icon>
-                            <Crop />
-                        </el-icon>
-                        <span>更换头像</span>
-                    </el-menu-item>
                     <el-menu-item index="/user/resetPassword">
                         <el-icon>
                             <EditPen />
@@ -235,14 +228,13 @@ const handleCommand = (command) => {
                 <!-- 右侧：用户信息下拉按钮 -->
                 <el-dropdown placement="bottom-end" @command="handleCommand">
                     <div class="user-btn">
-                        <el-avatar :size="28" :src="userInfoStore.info.user_pic || avatar" />
+                        <el-avatar :size="28" :src="userInfoStore.info.userPic || userInfoStore.info.user_pic || avatar" />
                         <span class="user-name">{{ userInfoStore.info.nickname || '未登录' }}</span>
                         <el-icon :size="12"><CaretBottom /></el-icon>
                     </div>
                     <template #dropdown>
                         <el-dropdown-menu>
                             <el-dropdown-item command="info" :icon="User">基本资料</el-dropdown-item>
-                            <el-dropdown-item command="avatar" :icon="Crop">更换头像</el-dropdown-item>
                             <el-dropdown-item command="resetPassword" :icon="EditPen">重置密码</el-dropdown-item>
                             <el-dropdown-item command="logout" :icon="SwitchButton">退出登录</el-dropdown-item>
                         </el-dropdown-menu>

@@ -54,6 +54,11 @@ public class ProcessController {
     public ResponseEntity<byte[]> content(@PathVariable Long mediaId) {
         Map<String, Object> media = service.getMedia(mediaId);
         if (media == null) return ResponseEntity.notFound().build();
+        if (media.get("fileData") == null && media.get("fileUrl") != null) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, String.valueOf(media.get("fileUrl"))).build();
+        }
+        if (media.get("fileData") == null) return ResponseEntity.notFound().build();
         String name = URLEncoder.encode(String.valueOf(media.get("fileName")), StandardCharsets.UTF_8).replace("+", "%20");
         MediaType type;
         try { type = MediaType.parseMediaType(String.valueOf(media.get("contentType"))); }

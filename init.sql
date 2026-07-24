@@ -21,8 +21,32 @@ CREATE TABLE IF NOT EXISTS user (
     email        VARCHAR(100),
     user_pic     VARCHAR(500) COMMENT '用户头像地址',
     token_version INT         DEFAULT 0 COMMENT 'JWT token版本号，修改密码后+1',
+    last_login_time DATETIME  COMMENT '最近登录时间',
     create_time  DATETIME,
     update_time  DATETIME
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_security_log (
+    id           BIGINT       PRIMARY KEY AUTO_INCREMENT,
+    user_id      INT          NOT NULL,
+    event_type   VARCHAR(50)  NOT NULL COMMENT 'login/profile_update/avatar_update/password_change/logout',
+    event_detail VARCHAR(255),
+    ip_address   VARCHAR(64),
+    create_time  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_security_log_user_time (user_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_session (
+    id               BIGINT       PRIMARY KEY AUTO_INCREMENT,
+    session_id       VARCHAR(64)  NOT NULL UNIQUE,
+    user_id          INT          NOT NULL,
+    login_ip         VARCHAR(64),
+    user_agent       VARCHAR(500),
+    status           VARCHAR(20)  NOT NULL DEFAULT 'active' COMMENT 'active/logged_out/revoked',
+    login_time       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_active_time DATETIME,
+    logout_time      DATETIME,
+    INDEX idx_user_session_user_status (user_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================
@@ -471,6 +495,7 @@ CREATE TABLE IF NOT EXISTS conservation_project (
     source_alert_id    BIGINT       COMMENT '来源监测预警ID',
     source_monitoring_record_id BIGINT COMMENT '来源监测记录ID',
     project_type       VARCHAR(20)  DEFAULT '综合' COMMENT '项目类型：保护/修复/复原/综合',
+    record_mode        VARCHAR(20)  DEFAULT 'standard' COMMENT '建档模式：quick/standard/full',
     status             VARCHAR(20)  DEFAULT 'draft' COMMENT '项目状态：draft/active/completed/suspended/archived',
     current_stage      VARCHAR(30)  DEFAULT 'pendingSurvey' COMMENT '当前阶段',
     risk_level         VARCHAR(20)  DEFAULT 'medium' COMMENT '风险等级：high/medium/low',
@@ -485,6 +510,37 @@ CREATE TABLE IF NOT EXISTS conservation_project (
     update_time        DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted            TINYINT      DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='保护修复项目表';
+
+-- 小型、简单修复项目的轻量记录；复杂项目仍使用完整的七页面工作流。
+CREATE TABLE IF NOT EXISTS conservation_quick_record (
+    id                  BIGINT PRIMARY KEY AUTO_INCREMENT,
+    project_id          INT NOT NULL,
+    issue_description   TEXT,
+    treatment_method    TEXT,
+    operator_name       VARCHAR(100),
+    record_date         DATE,
+    conclusion          TEXT,
+    remark              TEXT,
+    record_status       VARCHAR(20) DEFAULT 'draft',
+    create_time         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_quick_record_project (project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='保护修复快速记录';
+
+CREATE TABLE IF NOT EXISTS conservation_quick_record_media (
+    id                  BIGINT PRIMARY KEY AUTO_INCREMENT,
+    quick_record_id     BIGINT NOT NULL,
+    media_role          VARCHAR(20) NOT NULL COMMENT 'before/after/other',
+    original_name       VARCHAR(255) NOT NULL,
+    content_type        VARCHAR(120),
+    file_size           BIGINT,
+    file_url            VARCHAR(1000) NOT NULL,
+    oss_object_key      VARCHAR(600),
+    description         VARCHAR(1000),
+    create_time         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_quick_record_media_record (quick_record_id),
+    INDEX idx_quick_record_media_role (media_role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='保护修复快速记录图片';
 
 -- 11.2 病害类型字典表
 CREATE TABLE IF NOT EXISTS conservation_disease_type (
@@ -563,7 +619,10 @@ CREATE TABLE IF NOT EXISTS conservation_disease_media (
     file_name         VARCHAR(255) NOT NULL,
     content_type      VARCHAR(120) NOT NULL,
     file_size         BIGINT       NOT NULL,
-    file_data         LONGBLOB     NOT NULL,
+    -- 文件保存于 OSS；数据库仅保存访问地址、对象键及业务元数据。
+    file_url          VARCHAR(1000),
+    oss_object_key    VARCHAR(600),
+    file_data         LONGBLOB,
     title             VARCHAR(255),
     description       VARCHAR(1000),
     annotations_json  JSON         COMMENT '归一化矩形标注数组',
@@ -648,7 +707,9 @@ CREATE TABLE IF NOT EXISTS conservation_archive_attachment (
     file_type      VARCHAR(50),
     content_type   VARCHAR(120),
     file_size      BIGINT,
-    file_data      LONGBLOB     NOT NULL,
+    file_url       VARCHAR(1000),
+    oss_object_key VARCHAR(600),
+    file_data      LONGBLOB,
     source_module  VARCHAR(100),
     section_name   VARCHAR(100),
     version_no     VARCHAR(30),
@@ -725,7 +786,9 @@ CREATE TABLE IF NOT EXISTS conservation_process_media (
     original_name            VARCHAR(255) NOT NULL,
     content_type             VARCHAR(120),
     file_size                BIGINT,
-    file_data                LONGBLOB     NOT NULL,
+    file_url                 VARCHAR(1000),
+    oss_object_key           VARCHAR(600),
+    file_data                LONGBLOB,
     title                    VARCHAR(255),
     shooting_time            DATETIME,
     shooting_position        VARCHAR(150),
@@ -796,6 +859,8 @@ CREATE TABLE IF NOT EXISTS conservation_comparison_media (
     original_name     VARCHAR(255),
     content_type      VARCHAR(100),
     file_size         BIGINT,
+    file_url          VARCHAR(1000),
+    oss_object_key    VARCHAR(600),
     file_data         LONGBLOB,
     target_part       VARCHAR(150),
     shooting_position VARCHAR(150),
@@ -925,6 +990,8 @@ CREATE TABLE IF NOT EXISTS conservation_restoration_media (
     original_name                   VARCHAR(255),
     content_type                    VARCHAR(100),
     file_size                       BIGINT,
+    file_url                        VARCHAR(1000),
+    oss_object_key                  VARCHAR(600),
     file_data                       LONGBLOB,
     title                           VARCHAR(255),
     description                     TEXT,
@@ -945,6 +1012,8 @@ CREATE TABLE IF NOT EXISTS conservation_restoration_model (
     original_name         VARCHAR(255),
     content_type          VARCHAR(100),
     file_size             BIGINT,
+    file_url              VARCHAR(1000),
+    oss_object_key        VARCHAR(600),
     file_data             LONGBLOB,
     file_format           VARCHAR(30),
     scale_unit            VARCHAR(30),
@@ -1182,7 +1251,9 @@ CREATE TABLE IF NOT EXISTS monitoring_media (
     original_name         VARCHAR(255) NOT NULL,
     content_type          VARCHAR(100),
     file_size             BIGINT,
-    file_data             LONGBLOB NOT NULL,
+    file_url              VARCHAR(1000),
+    oss_object_key        VARCHAR(600),
+    file_data             LONGBLOB,
     shooting_position     VARCHAR(150),
     shooting_time         DATETIME,
     title                 VARCHAR(255),

@@ -101,6 +101,14 @@
         SELECT a.*
         FROM artifacts a
         <where>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    a.new_artifact_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR a.original_artifact_name LIKE CONCAT('%', #{keyword}, '%')
+                    OR a.new_artifact_code LIKE CONCAT('%', #{keyword}, '%')
+                    OR a.original_artifact_code LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
             <if test="newArtifactName != null and newArtifactName != ''">
                 AND a.new_artifact_name LIKE CONCAT('%', #{newArtifactName}, '%')
             </if>

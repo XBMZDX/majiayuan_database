@@ -3,6 +3,7 @@ package com.itheima.bigevent.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itheima.bigevent.service.ArchiveService;
+import com.itheima.bigevent.utils.ConservationOssStorage;
 import com.itheima.bigevent.service.DiseaseSurveyService;
 import com.itheima.bigevent.service.MonitoringService;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -57,6 +58,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             """, projectId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("project", project);
+        result.put("artifact", artifactInfo(longValue(project.get("artifactId"))));
         if (archive == null) {
             result.put("archive", null);
             result.put("workspace", null);
@@ -211,31 +213,33 @@ public class ArchiveServiceImpl implements ArchiveService {
         if (file.getSize() > 50L * 1024 * 1024) throw new IllegalArgumentException("单个文件不能超过50MB");
         Map<String, Object> archive = requireArchive(archiveId);
         try {
+            Map<String, String> stored = ConservationOssStorage.upload("archive-attachments", file);
             var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO conservation_archive_attachment
-                (archive_id,project_id,file_name,file_type,content_type,file_size,file_data,
+                (archive_id,project_id,file_name,file_type,content_type,file_size,file_url,oss_object_key,
                  source_module,section_name,version_no,description,uploaded_by)
-                VALUES (:archiveId,:projectId,:fileName,:fileType,:contentType,:fileSize,:fileData,
+                VALUES (:archiveId,:projectId,:fileName,:fileType,:contentType,:fileSize,:fileUrl,:ossObjectKey,
                  :sourceModule,:sectionName,:versionNo,:description,:uploadedBy)
                 """, new MapSqlParameterSource()
                 .addValue("archiveId", archiveId).addValue("projectId", archive.get("projectId"))
                 .addValue("fileName", Optional.ofNullable(file.getOriginalFilename()).orElse("attachment"))
                 .addValue("fileType", metadata.get("fileType"))
                 .addValue("contentType", Optional.ofNullable(file.getContentType()).orElse("application/octet-stream"))
-                .addValue("fileSize", file.getSize()).addValue("fileData", file.getBytes())
+                .addValue("fileSize", file.getSize()).addValue("fileUrl", stored.get("fileUrl"))
+                .addValue("ossObjectKey", stored.get("objectKey"))
                 .addValue("sourceModule", metadata.get("sourceModule")).addValue("sectionName", metadata.get("sectionName"))
                 .addValue("versionNo", metadata.get("version")).addValue("description", metadata.get("description"))
                 .addValue("uploadedBy", metadata.get("uploadedBy")), key, new String[]{"id"});
             return attachmentMetadata(key.getKey().longValue());
         } catch (Exception e) {
-            throw new IllegalStateException("附件写入MySQL失败", e);
+            throw new IllegalStateException("附件上传到 OSS 失败", e);
         }
     }
 
     @Override
     public Map<String, Object> getAttachment(Long attachmentId) {
-        return one("SELECT file_name AS fileName,content_type AS contentType,file_data AS fileData FROM conservation_archive_attachment WHERE id=?", attachmentId);
+        return one("SELECT file_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl FROM conservation_archive_attachment WHERE id=?", attachmentId);
     }
 
     @Override
@@ -276,6 +280,30 @@ public class ArchiveServiceImpl implements ArchiveService {
             "handling","shockproof","reviewCycle","monitorDiseases","monitoringIndicators","followUpAdvice","warningConditions"));
         w.put("attachments", new ArrayList<>());
         return w;
+    }
+
+    private Map<String, Object> artifactInfo(Long artifactId) {
+        if (artifactId == null) return null;
+        return one("""
+            SELECT a.id,
+                   COALESCE(NULLIF(a.new_artifact_code,''),a.original_artifact_code,'') AS artifactCode,
+                   COALESCE(NULLIF(a.new_artifact_name,''),a.original_artifact_name,'') AS artifactName,
+                   CONCAT_WS('、',NULLIF(a.material1,''),NULLIF(a.material2,'')) AS material,
+                   a.completeness,a.artifact_description AS artifactDescription,
+                   a.quantity1,a.quantity2,a.dimensions,a.weight,
+                   a.excavation_relic AS excavationRelic,a.excavation_position AS excavationPosition,
+                   a.excavation_time AS excavationTime,a.storage_method AS storageMethod,
+                   a.transfer_process AS transferProcess,a.restoration_status AS restorationStatus,
+                   a.photographer,a.draftsperson,a.text_describer AS textDescriber,
+                   a.notes,a.grading_status AS gradingStatus,
+                   COALESCE(
+                       (SELECT image_url FROM artifact_image image
+                        WHERE image.artifact_id=a.id AND image.deleted=0
+                        ORDER BY image.is_cover DESC,image.sort_order ASC,image.id ASC LIMIT 1),
+                       NULLIF(a.images,'')
+                   ) AS coverImageUrl
+            FROM artifacts a WHERE a.id=?
+            """, artifactId);
     }
 
     private void mergeCurrentSurvey(Long projectId, Map<String, Object> archive, Map<String, Object> workspace) {
@@ -373,7 +401,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             SELECT id,file_name AS fileName,file_type AS fileType,file_size AS fileSize,
                    source_module AS sourceModule,section_name AS sectionName,uploaded_by AS uploadedBy,
                    create_time AS uploadTime,version_no AS version,description,
-                   CONCAT('/api/conservation/archive-attachments/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/archive-attachments/',id,'/content')) AS fileUrl
             FROM conservation_archive_attachment WHERE archive_id=? ORDER BY create_time DESC,id DESC
             """, this::camelMap, id);
     }
@@ -383,7 +411,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             SELECT id,file_name AS fileName,file_type AS fileType,file_size AS fileSize,
                    source_module AS sourceModule,section_name AS sectionName,uploaded_by AS uploadedBy,
                    create_time AS uploadTime,version_no AS version,description,
-                   CONCAT('/api/conservation/archive-attachments/',id,'/content') AS fileUrl
+                   COALESCE(file_url,CONCAT('/api/conservation/archive-attachments/',id,'/content')) AS fileUrl
             FROM conservation_archive_attachment WHERE id=?
             """, id);
     }
@@ -446,8 +474,13 @@ public class ArchiveServiceImpl implements ArchiveService {
     }
 
     private static Long longValue(Object value) {
-        return value instanceof Number n ? n.longValue()
-            : value == null || value.toString().isBlank() ? null : Long.valueOf(value.toString());
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return Long.valueOf(number.longValue());
+        }
+        return Long.valueOf(value.toString());
     }
 
     private int intValue(Object value) {

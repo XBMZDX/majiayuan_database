@@ -1,6 +1,7 @@
 package com.itheima.bigevent.service.impl;
 
 import com.itheima.bigevent.service.MonitoringService;
+import com.itheima.bigevent.utils.ConservationOssStorage;
 import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -41,6 +42,28 @@ public class MonitoringServiceImpl implements MonitoringService {
             "ALTER TABLE monitoring_alert ADD COLUMN created_project_id INT COMMENT '由预警创建的保护修复项目ID'");
         addColumnIfMissing("monitoring_alert", "project_created_time",
             "ALTER TABLE monitoring_alert ADD COLUMN project_created_time DATETIME COMMENT '保护修复项目创建时间'");
+        addColumnIfMissing("conservation_project", "record_mode",
+            "ALTER TABLE conservation_project ADD COLUMN record_mode VARCHAR(20) DEFAULT 'standard' COMMENT '建档模式：quick/standard/full'");
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS conservation_quick_record (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT, project_id INT NOT NULL,
+                issue_description TEXT, treatment_method TEXT, operator_name VARCHAR(100), record_date DATE,
+                conclusion TEXT, remark TEXT, record_status VARCHAR(20) DEFAULT 'draft',
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_quick_record_project (project_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+        jdbc.execute("""
+            CREATE TABLE IF NOT EXISTS conservation_quick_record_media (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT, quick_record_id BIGINT NOT NULL,
+                media_role VARCHAR(20) NOT NULL, original_name VARCHAR(255) NOT NULL,
+                content_type VARCHAR(120), file_size BIGINT, file_url VARCHAR(1000) NOT NULL,
+                oss_object_key VARCHAR(600), description VARCHAR(1000),
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_quick_record_media_record (quick_record_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
     }
 
     @Override
@@ -48,11 +71,11 @@ public class MonitoringServiceImpl implements MonitoringService {
         List<Map<String, Object>> projects = jdbc.query("""
             SELECT p.id, p.project_code AS projectCode, p.project_name AS projectName,
                    p.artifact_id AS artifactId,
-                   COALESCE(NULLIF(p.artifact_code,''), a.new_artifact_code, '') AS artifactCode,
-                   COALESCE(NULLIF(p.artifact_name,''), a.new_artifact_name, '') AS artifactName,
+                   COALESCE(NULLIF(p.artifact_code,''), a.new_artifact_code, a.original_artifact_code, '') AS artifactCode,
+                   COALESCE(NULLIF(p.artifact_name,''), a.new_artifact_name, a.original_artifact_name, '') AS artifactName,
                    CONCAT_WS('、', a.material1, a.material2) AS material,
                    COALESCE(a.excavation_relic, '') AS tombCode,
-                   p.project_type AS projectType, p.status, p.current_stage AS currentStage,
+                   p.project_type AS projectType,p.record_mode AS recordMode,p.status,p.current_stage AS currentStage,
                    p.risk_level AS riskLevel, p.progress, p.principal, p.department,
                    p.start_date AS startDate, p.expected_end_date AS expectedEndDate,
                    p.summary, p.source_project_id AS sourceProjectId,
@@ -81,10 +104,10 @@ public class MonitoringServiceImpl implements MonitoringService {
         var rows = jdbc.query("""
             SELECT p.id, p.project_code AS projectCode, p.project_name AS projectName,
                    p.artifact_id AS artifactId,
-                   COALESCE(NULLIF(p.artifact_code,''), a.new_artifact_code, '') AS artifactCode,
-                   COALESCE(NULLIF(p.artifact_name,''), a.new_artifact_name, '') AS artifactName,
+                   COALESCE(NULLIF(p.artifact_code,''), a.new_artifact_code, a.original_artifact_code, '') AS artifactCode,
+                   COALESCE(NULLIF(p.artifact_name,''), a.new_artifact_name, a.original_artifact_name, '') AS artifactName,
                    CONCAT_WS('、', a.material1, a.material2) AS material,
-                   p.project_type AS projectType, p.status, p.current_stage AS currentStage,
+                   p.project_type AS projectType,p.record_mode AS recordMode,p.status,p.current_stage AS currentStage,
                    p.risk_level AS riskLevel, p.progress, p.principal, p.department,
                    p.start_date AS startDate, p.expected_end_date AS expectedEndDate, p.summary,
                    p.source_project_id AS sourceProjectId, p.source_alert_id AS sourceAlertId,
@@ -98,54 +121,350 @@ public class MonitoringServiceImpl implements MonitoringService {
 
     @Override
     public Map<String, Object> createProject(Map<String, Object> data) {
+        String recordMode = normalizeRecordMode(text(data.get("recordMode")));
+        String currentStage = "quick".equals(recordMode) ? "quick_record" : "pendingSurvey";
+        Long artifactId = resolveArtifactId(data);
         var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
         namedJdbc.update("""
             INSERT INTO conservation_project
             (project_code,project_name,artifact_id,artifact_code,artifact_name,project_type,status,current_stage,risk_level,
-             progress,principal,department,start_date,expected_end_date,summary)
+             record_mode,progress,principal,department,start_date,expected_end_date,summary)
             VALUES
-            (:projectCode,:projectName,:artifactId,:artifactCode,:artifactName,:projectType,'draft','pendingSurvey',:riskLevel,
-             0,:principal,:department,:startDate,:expectedEndDate,:summary)
+            (:projectCode,:projectName,:artifactId,:artifactCode,:artifactName,:projectType,'draft',:currentStage,:riskLevel,
+             :recordMode,0,:principal,:department,:startDate,:expectedEndDate,:summary)
             """, params(data).addValue("startDate", date(data.get("startDate")))
-                .addValue("expectedEndDate", date(data.get("expectedEndDate"))), key, new String[]{"id"});
-        return getProject(key.getKey().longValue());
+                .addValue("expectedEndDate", date(data.get("expectedEndDate")))
+                .addValue("recordMode", recordMode).addValue("currentStage", currentStage)
+                .addValue("artifactId", artifactId), key, new String[]{"id"});
+        return getProject(requiredGeneratedId(key, "新建保护修复项目"));
     }
 
     @Override
     public void updateProject(Long projectId, Map<String, Object> data) {
+        Long artifactId = resolveArtifactId(data);
         update("""
             UPDATE conservation_project SET project_code=:projectCode,project_name=:projectName,
             artifact_id=:artifactId,artifact_code=:artifactCode,artifact_name=:artifactName,
-            project_type=:projectType,status=:status,current_stage=:currentStage,
+            project_type=:projectType,record_mode=:recordMode,status=:status,current_stage=:currentStage,
             risk_level=:riskLevel,progress=:progress,principal=:principal,department=:department,
             start_date=:startDate,expected_end_date=:expectedEndDate,summary=:summary
             WHERE id=:id AND deleted=0
-            """, params(data).addValue("id", projectId).addValue("startDate", date(data.get("startDate")))
-                .addValue("expectedEndDate", date(data.get("expectedEndDate"))));
+            """, params(data).addValue("id", projectId).addValue("recordMode", normalizeRecordMode(text(data.get("recordMode"))))
+                .addValue("startDate", date(data.get("startDate")))
+                .addValue("expectedEndDate", date(data.get("expectedEndDate"))).addValue("artifactId", artifactId));
+    }
+
+    @Override
+    public Map<String, Object> getQuickRecord(Long projectId) {
+        Map<String, Object> project = getProject(projectId);
+        if (project == null) throw new IllegalArgumentException("保护修复项目不存在");
+        Map<String, Object> record = one("""
+            SELECT id,project_id AS projectId,issue_description AS issueDescription,
+                   treatment_method AS treatmentMethod,operator_name AS operatorName,
+                   record_date AS recordDate,conclusion,remark,record_status AS recordStatus,
+                   create_time AS createTime,update_time AS updateTime
+            FROM conservation_quick_record WHERE project_id=?
+            """, projectId);
+        if (record == null) {
+            record = new LinkedHashMap<>();
+            record.put("projectId", projectId);
+            record.put("operatorName", text(project.get("principal")));
+            record.put("recordDate", LocalDate.now().toString());
+            record.put("recordStatus", "draft");
+        }
+        Long recordId = longValue(record.get("id"));
+        if (recordId == null) {
+            record.put("media", List.of());
+        } else {
+            record.put("media", jdbc.query("""
+                SELECT id,quick_record_id AS quickRecordId,media_role AS mediaRole,
+                       original_name AS fileName,content_type AS contentType,file_size AS fileSize,
+                       file_url AS fileUrl,description,create_time AS createTime
+                FROM conservation_quick_record_media WHERE quick_record_id=? ORDER BY create_time,id
+                """, this::camelMap, recordId));
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("project", project);
+        result.put("record", record);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> saveQuickRecord(Long projectId, Map<String, Object> data) {
+        Map<String, Object> project = getProject(projectId);
+        if (project == null) throw new IllegalArgumentException("保护修复项目不存在");
+        if (!"quick".equals(text(project.get("recordMode")))) {
+            throw new IllegalStateException("当前项目不是快速记录模式");
+        }
+        boolean completed = Boolean.TRUE.equals(data.get("completed"));
+        namedJdbc.update("""
+            INSERT INTO conservation_quick_record
+            (project_id,issue_description,treatment_method,operator_name,record_date,conclusion,remark,record_status)
+            VALUES (:projectId,:issueDescription,:treatmentMethod,:operatorName,:recordDate,:conclusion,:remark,:recordStatus)
+            ON DUPLICATE KEY UPDATE issue_description=VALUES(issue_description),treatment_method=VALUES(treatment_method),
+            operator_name=VALUES(operator_name),record_date=VALUES(record_date),conclusion=VALUES(conclusion),
+            remark=VALUES(remark),record_status=VALUES(record_status)
+            """, params(data).addValue("projectId", projectId)
+            .addValue("recordDate", date(data.get("recordDate")))
+            .addValue("recordStatus", completed ? "completed" : "draft"));
+        jdbc.update("""
+            UPDATE conservation_project SET status=?,current_stage=?,progress=? WHERE id=? AND deleted=0
+            """, completed ? "completed" : "active", completed ? "completed" : "quick_record",
+            completed ? 100 : 50, projectId);
+        return getQuickRecord(projectId);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> uploadQuickRecordMedia(Long projectId, MultipartFile file, Map<String, String> metadata) {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("请选择图片");
+        if (file.getSize() > 20L * 1024 * 1024) throw new IllegalArgumentException("单张图片不能超过20MB");
+        String contentType = Objects.toString(file.getContentType(), "");
+        if (!contentType.startsWith("image/")) throw new IllegalArgumentException("快速记录仅支持上传图片");
+        Map<String, Object> project = getProject(projectId);
+        if (project == null || !"quick".equals(text(project.get("recordMode")))) {
+            throw new IllegalArgumentException("快速记录项目不存在");
+        }
+        jdbc.update("""
+            INSERT IGNORE INTO conservation_quick_record (project_id,operator_name,record_date,record_status)
+            VALUES (?,?,?, 'draft')
+            """, projectId, text(project.get("principal")), LocalDate.now());
+        Map<String, Object> savedRecord = one("SELECT id FROM conservation_quick_record WHERE project_id=?", projectId);
+        Long recordId = savedRecord == null ? null : longValue(savedRecord.get("id"));
+        if (recordId == null) {
+            throw new IllegalStateException("快速记录保存失败：未获得记录主键");
+        }
+        try {
+            Map<String, String> stored = ConservationOssStorage.upload("quick-record-media", file);
+            var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
+            namedJdbc.update("""
+                INSERT INTO conservation_quick_record_media
+                (quick_record_id,media_role,original_name,content_type,file_size,file_url,oss_object_key,description)
+                VALUES (:recordId,:mediaRole,:fileName,:contentType,:fileSize,:fileUrl,:ossObjectKey,:description)
+                """, new MapSqlParameterSource()
+                .addValue("recordId", recordId).addValue("mediaRole", text(metadata.getOrDefault("mediaRole", "other")))
+                .addValue("fileName", Objects.toString(file.getOriginalFilename(), "image"))
+                .addValue("contentType", contentType).addValue("fileSize", file.getSize())
+                .addValue("fileUrl", stored.get("fileUrl")).addValue("ossObjectKey", stored.get("objectKey"))
+                .addValue("description", metadata.get("description")), key, new String[]{"id"});
+            return one("""
+                SELECT id,quick_record_id AS quickRecordId,media_role AS mediaRole,
+                       original_name AS fileName,content_type AS contentType,file_size AS fileSize,
+                       file_url AS fileUrl,description,create_time AS createTime
+                FROM conservation_quick_record_media WHERE id=?
+                """, requiredGeneratedId(key, "快速记录图片"));
+        } catch (Exception exception) {
+            throw new IllegalStateException("快速记录图片上传到 OSS 失败", exception);
+        }
+    }
+
+    @Override
+    public void deleteQuickRecordMedia(Long mediaId) {
+        jdbc.update("DELETE FROM conservation_quick_record_media WHERE id=?", mediaId);
     }
 
     @Override
     @Transactional
     public void deleteProject(Long projectId) {
-        Integer count = jdbc.queryForObject("""
-            SELECT (SELECT COUNT(*) FROM monitoring_record WHERE project_id=? AND deleted=0)
-                 + (SELECT COUNT(*) FROM conservation_disease_record WHERE project_id=? AND deleted=0)
-            """, Integer.class, projectId, projectId);
-        if (count != null && count > 0) throw new IllegalStateException("项目已有业务记录，不能删除；可改为归档");
-        jdbc.update("UPDATE conservation_project SET deleted=1 WHERE id=?", projectId);
+        if (getProject(projectId) == null) {
+            throw new IllegalArgumentException("保护修复项目不存在或已删除");
+        }
+        deleteProjectOssFiles(projectId);
+
+        // 保留由当前项目预警创建的后续项目，但移除已删除项目的来源引用。
+        jdbc.update("""
+            UPDATE conservation_project
+            SET source_project_id=NULL,source_alert_id=NULL,source_monitoring_record_id=NULL
+            WHERE source_project_id=?
+            """, projectId);
+        jdbc.update("""
+            UPDATE monitoring_alert
+            SET created_project_id=NULL,project_created_time=NULL
+            WHERE created_project_id=? AND project_id<>?
+            """, projectId, projectId);
+
+        // 快速修复记录。
+        jdbc.update("""
+            DELETE media FROM conservation_quick_record_media media
+            JOIN conservation_quick_record record ON record.id=media.quick_record_id
+            WHERE record.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM conservation_quick_record WHERE project_id=?", projectId);
+
+        // 病害调查。
+        jdbc.update("DELETE FROM conservation_disease_media WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_disease_record WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_disease_survey WHERE project_id=?", projectId);
+
+        // 档案及修复过程。
+        jdbc.update("""
+            DELETE revision FROM conservation_archive_revision revision
+            JOIN conservation_archive archive ON archive.id=revision.archive_id
+            WHERE archive.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM conservation_archive_attachment WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_archive_advice WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_archive WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_process_media WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_process_step WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM conservation_process WHERE project_id=?", projectId);
+
+        // 修复前后对比。
+        jdbc.update("""
+            DELETE metric FROM conservation_comparison_metric metric
+            JOIN conservation_comparison comparison ON comparison.id=metric.comparison_id
+            WHERE comparison.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE media FROM conservation_comparison_media media
+            JOIN conservation_comparison comparison ON comparison.id=media.comparison_id
+            WHERE comparison.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM conservation_comparison WHERE project_id=?", projectId);
+
+        // 文物复原成果。
+        jdbc.update("""
+            DELETE source FROM conservation_restoration_source source
+            JOIN conservation_restoration_result result ON result.id=source.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE part FROM conservation_restoration_part part
+            JOIN conservation_restoration_result result ON result.id=part.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE media FROM conservation_restoration_media media
+            JOIN conservation_restoration_result result ON result.id=media.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE model FROM conservation_restoration_model model
+            JOIN conservation_restoration_result result ON result.id=model.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE version FROM conservation_restoration_version version
+            JOIN conservation_restoration_result result ON result.id=version.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM conservation_restoration_result WHERE project_id=?", projectId);
+
+        // 后续监测（先删最底层数据，再删计划）。
+        jdbc.update("DELETE FROM monitoring_media WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM monitoring_alert WHERE project_id=?", projectId);
+        jdbc.update("""
+            DELETE value_record FROM monitoring_value value_record
+            JOIN monitoring_record record ON record.id=value_record.record_id
+            WHERE record.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM monitoring_record WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM monitoring_task WHERE project_id=?", projectId);
+        jdbc.update("""
+            DELETE baseline FROM monitoring_baseline baseline
+            JOIN monitoring_plan plan ON plan.id=baseline.plan_id
+            WHERE plan.project_id=?
+            """, projectId);
+        jdbc.update("""
+            DELETE indicator_record FROM monitoring_indicator indicator_record
+            JOIN monitoring_plan plan ON plan.id=indicator_record.plan_id
+            WHERE plan.project_id=?
+            """, projectId);
+        jdbc.update("DELETE FROM monitoring_target WHERE project_id=?", projectId);
+        jdbc.update("DELETE FROM monitoring_plan WHERE project_id=?", projectId);
+
+        jdbc.update("DELETE FROM conservation_project WHERE id=?", projectId);
+    }
+
+    private void deleteProjectOssFiles(Long projectId) {
+        Set<String> objectKeys = new LinkedHashSet<>();
+        addOssObjectKeys(objectKeys, """
+            SELECT media.oss_object_key FROM conservation_quick_record_media media
+            JOIN conservation_quick_record record ON record.id=media.quick_record_id
+            WHERE record.project_id=?
+            """, projectId);
+        addOssObjectKeys(objectKeys, "SELECT oss_object_key FROM conservation_disease_media WHERE project_id=?", projectId);
+        addOssObjectKeys(objectKeys, "SELECT oss_object_key FROM conservation_archive_attachment WHERE project_id=?", projectId);
+        addOssObjectKeys(objectKeys, "SELECT oss_object_key FROM conservation_process_media WHERE project_id=?", projectId);
+        addOssObjectKeys(objectKeys, """
+            SELECT media.oss_object_key FROM conservation_comparison_media media
+            JOIN conservation_comparison comparison ON comparison.id=media.comparison_id
+            WHERE comparison.project_id=?
+            """, projectId);
+        addOssObjectKeys(objectKeys, """
+            SELECT media.oss_object_key FROM conservation_restoration_media media
+            JOIN conservation_restoration_result result ON result.id=media.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        addOssObjectKeys(objectKeys, """
+            SELECT model.oss_object_key FROM conservation_restoration_model model
+            JOIN conservation_restoration_result result ON result.id=model.result_id
+            WHERE result.project_id=?
+            """, projectId);
+        addOssObjectKeys(objectKeys, "SELECT oss_object_key FROM monitoring_media WHERE project_id=?", projectId);
+        try {
+            for (String objectKey : objectKeys) ConservationOssStorage.delete(objectKey);
+        } catch (Exception exception) {
+            throw new IllegalStateException("项目 OSS 文件删除失败，已停止删除项目：" + exception.getMessage(), exception);
+        }
+    }
+
+    private void addOssObjectKeys(Set<String> target, String sql, Long projectId) {
+        for (String objectKey : jdbc.queryForList(sql, String.class, projectId)) {
+            if (objectKey != null && !objectKey.isBlank()) target.add(objectKey);
+        }
     }
 
     @Override
     public List<Map<String, Object>> searchArtifacts(String keyword) {
         String value = "%" + Objects.toString(keyword, "").trim() + "%";
         return jdbc.query("""
-            SELECT id,new_artifact_code AS code,new_artifact_name AS name,
+            SELECT id,COALESCE(NULLIF(new_artifact_code,''), original_artifact_code, '') AS code,
+                   COALESCE(NULLIF(new_artifact_name,''), original_artifact_name, '') AS name,
                    CONCAT_WS('、',material1,material2) AS material,
                    excavation_relic AS tombCode
             FROM artifacts
-            WHERE new_artifact_code LIKE ? OR new_artifact_name LIKE ?
+            WHERE new_artifact_code LIKE ? OR original_artifact_code LIKE ?
+               OR new_artifact_name LIKE ? OR original_artifact_name LIKE ?
             ORDER BY id DESC LIMIT 30
-            """, this::camelMap, value, value);
+            """, this::camelMap, value, value, value, value);
+    }
+
+    private Long resolveArtifactId(Map<String, Object> data) {
+        Long selectedId = longValue(data.get("artifactId"));
+        Integer selectedCount = selectedId == null ? 0 : jdbc.queryForObject(
+            "SELECT COUNT(*) FROM artifacts WHERE id=?", Integer.class, selectedId);
+        if (selectedId != null && selectedCount != null && selectedCount > 0) {
+            return selectedId;
+        }
+
+        String code = normalizeArtifactCode(text(data.get("artifactCode")));
+        String name = text(data.get("artifactName"));
+        Long codeId = code.isBlank() ? null : uniqueArtifactId("""
+            SELECT id FROM artifacts
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(new_artifact_code,'')),'：',':'),' ',''),'-',''),'*','')=?
+               OR REPLACE(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(original_artifact_code,'')),'：',':'),' ',''),'-',''),'*','')=?
+            """, code, code);
+        Long nameId = name.isBlank() ? null : uniqueArtifactId("""
+            SELECT id FROM artifacts
+            WHERE TRIM(COALESCE(new_artifact_name,''))=? OR TRIM(COALESCE(original_artifact_name,''))=?
+            """, name, name);
+
+        // 编号与名称均能匹配但指向不同文物时，不自动绑定，避免将项目关联到错误文物。
+        if (codeId != null && nameId != null && !Objects.equals(codeId, nameId)) {
+            return null;
+        }
+        return codeId != null ? codeId : nameId;
+    }
+
+    private Long uniqueArtifactId(String sql, Object... args) {
+        List<Long> ids = jdbc.queryForList(sql, Long.class, args);
+        return ids.size() == 1 ? ids.getFirst() : null;
+    }
+
+    private String normalizeArtifactCode(String value) {
+        return value.replace('：', ':').replace(" ", "").replace("-", "").replace("*", "");
     }
 
     @Override
@@ -194,7 +513,7 @@ public class MonitoringServiceImpl implements MonitoringService {
                        original_name AS fileName, target_part AS targetPart,
                        shooting_position AS shootingPosition, shooting_time AS shootingTime,
                        description AS imageDescription,
-                       CONCAT('/api/conservation/comparison-media/', id, '/content') AS fileUrl
+                       COALESCE(file_url,CONCAT('/api/conservation/comparison-media/', id, '/content')) AS fileUrl
                 FROM conservation_comparison_media WHERE comparison_id = ? ORDER BY id
                 """, this::camelMap, id));
             comparison.put("monitoring", Map.of(
@@ -227,7 +546,7 @@ public class MonitoringServiceImpl implements MonitoringService {
                 SELECT id, part_id AS restorationPartId, media_stage AS mediaStage,
                        original_name AS fileName, description, is_primary AS isPrimary,
                        selected_as_monitoring_baseline AS selectedAsMonitoringBaseline,
-                       CONCAT('/api/conservation/restoration-media/', id, '/content') AS fileUrl
+                       COALESCE(file_url,CONCAT('/api/conservation/restoration-media/', id, '/content')) AS fileUrl
                 FROM conservation_restoration_media WHERE result_id = ? ORDER BY id
                 """, this::camelMap, id);
             restoration.put("parts", parts);
@@ -302,8 +621,8 @@ public class MonitoringServiceImpl implements MonitoringService {
                        baseline_description AS baselineDescription, baseline_media_id AS baselineMediaId,
                        version_no AS versionNo, is_current AS isCurrent, created_by AS createdBy,
                        CASE
-                         WHEN source_business_type='comparison_after' THEN CONCAT('/api/conservation/comparison-media/', baseline_media_id, '/content')
-                         WHEN source_business_type='restoration' THEN CONCAT('/api/conservation/restoration-media/', baseline_media_id, '/content')
+                         WHEN source_business_type='comparison_after' THEN (SELECT COALESCE(file_url,CONCAT('/api/conservation/comparison-media/', id, '/content')) FROM conservation_comparison_media WHERE id=baseline_media_id)
+                         WHEN source_business_type='restoration' THEN (SELECT COALESCE(file_url,CONCAT('/api/conservation/restoration-media/', id, '/content')) FROM conservation_restoration_media WHERE id=baseline_media_id)
                          ELSE NULL
                        END AS baselineFileUrl
                 FROM monitoring_baseline WHERE target_id = ? AND is_current = 1 ORDER BY id DESC LIMIT 1
@@ -353,7 +672,7 @@ public class MonitoringServiceImpl implements MonitoringService {
                        original_name AS fileName, content_type AS contentType, file_size AS fileSize,
                        shooting_position AS shootingPosition, shooting_time AS shootingTime,
                        title, description,
-                       CONCAT('/api/conservation/monitoring-media/', id, '/content') AS fileUrl
+                       COALESCE(file_url,CONCAT('/api/conservation/monitoring-media/', id, '/content')) AS fileUrl
                 FROM monitoring_media WHERE record_id = ? ORDER BY id
                 """, this::camelMap, recordId));
         }
@@ -706,18 +1025,20 @@ public class MonitoringServiceImpl implements MonitoringService {
         Map<String, Object> record = one("SELECT project_id AS projectId,plan_id AS planId,task_id AS taskId,target_id AS targetId FROM monitoring_record WHERE id=?", recordId);
         if (record == null) throw new IllegalArgumentException("监测记录不存在");
         try {
+            Map<String, String> stored = ConservationOssStorage.upload("monitoring-media", file);
             var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
             namedJdbc.update("""
                 INSERT INTO monitoring_media
                 (project_id,plan_id,task_id,record_id,target_id,media_role,original_name,
-                 content_type,file_size,file_data,shooting_position,shooting_time,title,description,created_by)
+                 content_type,file_size,file_url,oss_object_key,shooting_position,shooting_time,title,description,created_by)
                 VALUES
                 (:projectId,:planId,:taskId,:recordId,:targetId,:mediaRole,:originalName,
-                 :contentType,:fileSize,:fileData,:shootingPosition,:shootingTime,:title,:description,:createdBy)
+                 :contentType,:fileSize,:fileUrl,:ossObjectKey,:shootingPosition,:shootingTime,:title,:description,:createdBy)
                 """, new MapSqlParameterSource(record)
                     .addValue("recordId", recordId).addValue("mediaRole", metadata.getOrDefault("mediaRole", "current"))
                     .addValue("originalName", file.getOriginalFilename()).addValue("contentType", contentType)
-                    .addValue("fileSize", file.getSize()).addValue("fileData", file.getBytes())
+                    .addValue("fileSize", file.getSize()).addValue("fileUrl", stored.get("fileUrl"))
+                    .addValue("ossObjectKey", stored.get("objectKey"))
                     .addValue("shootingPosition", metadata.get("shootingPosition"))
                     .addValue("shootingTime", dateTime(metadata.get("shootingTime")))
                     .addValue("title", metadata.get("title")).addValue("description", metadata.get("description"))
@@ -725,16 +1046,16 @@ public class MonitoringServiceImpl implements MonitoringService {
             Long id = key.getKey().longValue();
             return Map.of("id", id, "recordId", recordId, "fileName", Objects.toString(file.getOriginalFilename(), ""),
                 "contentType", contentType, "fileSize", file.getSize(),
-                "fileUrl", "/api/conservation/monitoring-media/" + id + "/content",
+                "fileUrl", stored.get("fileUrl"),
                 "role", metadata.getOrDefault("mediaRole", "current"));
         } catch (Exception e) {
-            throw new IllegalStateException("文件写入MySQL失败", e);
+            throw new IllegalStateException("文件上传到 OSS 失败", e);
         }
     }
 
     @Override
     public Map<String, Object> getMedia(Long mediaId) {
-        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData FROM monitoring_media WHERE id=?", mediaId);
+        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl FROM monitoring_media WHERE id=?", mediaId);
     }
 
     @Override
@@ -744,7 +1065,7 @@ public class MonitoringServiceImpl implements MonitoringService {
             case "restoration" -> "conservation_restoration_media";
             default -> throw new IllegalArgumentException("不支持的影像来源");
         };
-        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData FROM " + table + " WHERE id=?", mediaId);
+        return one("SELECT original_name AS fileName,content_type AS contentType,file_data AS fileData,file_url AS fileUrl FROM " + table + " WHERE id=?", mediaId);
     }
 
     @Override
@@ -783,7 +1104,7 @@ public class MonitoringServiceImpl implements MonitoringService {
     private MapSqlParameterSource params(Map<String, Object> map) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         map.forEach(params::addValue);
-        String[] defaults = {"projectCode","projectName","projectType","status","currentStage","progress",
+        String[] defaults = {"projectCode","projectName","projectType","recordMode","status","currentStage","progress",
             "principal","department","summary","riskLevel","artifactId","artifactCode","artifactName","archiveId","planCode","planName","planType","planStatus",
             "monitoringPurpose","monitoringScope","overallStrategy","responsiblePerson","participantNames",
             "monitoringLocation","defaultFrequencyValue","defaultFrequencyUnit","autoGenerateTask","alertEnabled",
@@ -802,7 +1123,8 @@ public class MonitoringServiceImpl implements MonitoringService {
             "valueNumber","valueText","previousValue","changeValue","changeRate","resultLevel",
             "resultDescription","manuallyConfirmed","alertCode","alertLevel","alertTitle","alertDescription",
             "triggerType","triggerValue","thresholdDescription","alertStatus","confirmedBy","immediateAction",
-            "treatmentAdvice","requiresDiseaseSurvey","createdProjectId"};
+            "treatmentAdvice","requiresDiseaseSurvey","createdProjectId","issueDescription","treatmentMethod",
+            "operatorName","recordDate","conclusion","remark","recordStatus"};
         for (String key : defaults) if (!params.hasValue(key)) params.addValue(key, null);
         return params;
     }
@@ -822,6 +1144,10 @@ public class MonitoringServiceImpl implements MonitoringService {
 
     private String text(Object value) {
         return Objects.toString(value, "").trim();
+    }
+
+    private String normalizeRecordMode(String value) {
+        return Set.of("quick", "standard", "full").contains(value) ? value : "standard";
     }
 
     private String defaultText(Object value, String fallback) {
@@ -853,9 +1179,22 @@ public class MonitoringServiceImpl implements MonitoringService {
         return id;
     }
 
+    private Long requiredGeneratedId(org.springframework.jdbc.support.GeneratedKeyHolder key, String operation) {
+        Number generatedId = key.getKey();
+        if (generatedId == null) {
+            throw new IllegalStateException(operation + "保存失败：数据库未返回主键");
+        }
+        return generatedId.longValue();
+    }
+
     private static Long longValue(Object value) {
-        return value instanceof Number number ? number.longValue() :
-            value == null || value.toString().isBlank() ? null : Long.valueOf(value.toString());
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return Long.valueOf(number.longValue());
+        }
+        return Long.valueOf(value.toString());
     }
 
     private boolean bool(Object value) {

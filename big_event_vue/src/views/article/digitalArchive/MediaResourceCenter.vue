@@ -8,7 +8,7 @@ import request from '@/utils/request.js'
 const router = useRouter()
 const loading = ref(false); const detailDrawer = ref(false); const previewVisible = ref(false)
 const list = ref([]); const total = ref(0); const summary = ref({}); const activeMedia = ref(null)
-const viewMode = ref('gallery'); const detailTab = ref('info')
+const viewMode = ref('gallery')
 
 const q = reactive({ keyword: '', mediaType: '', mediaStage: '', objectType: '', objectId: null, shootingPart: '', pageNum: 1, pageSize: 20 })
 const stageMap = { exploration: '勘探', excavation: '发掘', unearthed: '出土', cleaning_before: '清理前', cleaning: '清理中', cleaning_after: '清理后', detection: '检测分析', sampling: '取样', disease_survey: '病害调查', conservation_before: '修复前', conservation_process: '修复中', conservation_after: '修复后', restoration: '复原', display: '展示', monitoring: '监测', other: '其他' }
@@ -62,13 +62,13 @@ onMounted(() => { loadSummary(); loadList(); loadStageGroups() })
         <div v-if="viewMode==='gallery'" class="gallery">
             <div v-for="row in list" :key="row.resourceId" class="gallery-item" @click="openDetail(row)">
                 <div class="gi-thumb">
-                    <el-image v-if="row.thumbnailUrl" :src="row.thumbnailUrl" fit="cover" style="height:180px" />
+                    <el-image v-if="row.thumbnailUrl" :src="row.thumbnailUrl" fit="cover" style="width:100%;height:180px" />
                     <div v-else class="gi-placeholder">{{ row.mediaType === 'video' ? '🎬' : row.mediaType === 'audio' ? '🎵' : '🖼' }}</div>
                     <el-tag v-if="row.keyMedia" size="small" type="warning" effect="dark" style="position:absolute;top:6px;left:6px">⭐</el-tag>
                 </div>
                 <div class="gi-info">
                     <div class="gi-name">{{ row.mediaTitle || row.resourceName || '-' }}</div>
-                    <div class="gi-meta"><el-tag size="small">{{ stageMap[row.mediaStage] || row.mediaStage || '-' }}</el-tag><span>{{ row.primaryObjectCode }}</span></div>
+                    <div v-if="row.primaryObjectCode" class="gi-meta"><span>{{ row.primaryObjectCode }}</span></div>
                 </div>
             </div>
         </div>
@@ -92,24 +92,22 @@ onMounted(() => { loadSummary(); loadList(); loadStageGroups() })
     <!-- 详情 Drawer -->
     <el-drawer v-model="detailDrawer" title="媒体详情" size="680px">
         <template v-if="activeMedia">
-            <el-tabs v-model="detailTab">
-                <el-tab-pane label="预览" name="preview">
-                    <div style="text-align:center">
-                        <el-image v-if="activeMedia.previewUrl" :src="activeMedia.previewUrl" fit="contain" style="max-height:400px" :preview-src-list="[activeMedia.previewUrl]" />
-                        <video v-else-if="activeMedia.mediaType==='video' && activeMedia.previewUrl" :src="activeMedia.previewUrl" controls style="max-width:100%;max-height:400px" />
-                        <el-empty v-else description="暂无预览" :image-size="60" />
-                    </div>
-                </el-tab-pane>
-                <el-tab-pane label="基本信息" name="info">
-                    <el-descriptions :column="2" size="small" border>
-                        <el-descriptions-item label="资源名称">{{ activeMedia.resourceName }}</el-descriptions-item>
-                        <el-descriptions-item label="原始文件">{{ activeMedia.originalFileName }}</el-descriptions-item>
-                        <el-descriptions-item label="类型">{{ activeMedia.mediaType }}</el-descriptions-item>
-                        <el-descriptions-item label="大小">{{ formatSize(activeMedia.fileSize) }}</el-descriptions-item>
-                        <el-descriptions-item label="上传时间">{{ activeMedia.uploadTime }}</el-descriptions-item>
-                    </el-descriptions>
-                </el-tab-pane>
-            </el-tabs>
+            <el-descriptions :column="2" size="small" border>
+                <el-descriptions-item label="资源名称">{{ activeMedia.resourceName }}</el-descriptions-item>
+                <el-descriptions-item label="原始文件">{{ activeMedia.originalFileName }}</el-descriptions-item>
+                <el-descriptions-item label="类型">{{ activeMedia.mediaType }}</el-descriptions-item>
+                <el-descriptions-item label="大小">{{ formatSize(activeMedia.fileSize) }}</el-descriptions-item>
+                <el-descriptions-item label="上传时间">{{ activeMedia.uploadTime }}</el-descriptions-item>
+            </el-descriptions>
+            <div class="media-detail-preview">
+                <div class="preview-title">文件预览</div>
+                <div class="preview-body">
+                    <el-image v-if="activeMedia.mediaType === 'image' && activeMedia.previewUrl" :src="activeMedia.previewUrl" fit="contain" class="detail-image-preview" :preview-src-list="[activeMedia.previewUrl]" />
+                    <video v-else-if="activeMedia.mediaType === 'video' && activeMedia.previewUrl" :src="activeMedia.previewUrl" controls style="max-width:100%;max-height:420px" />
+                    <audio v-else-if="activeMedia.mediaType === 'audio' && activeMedia.previewUrl" :src="activeMedia.previewUrl" controls />
+                    <el-empty v-else description="暂无预览" :image-size="60" />
+                </div>
+            </div>
         </template>
     </el-drawer>
 </template>
@@ -129,6 +127,10 @@ onMounted(() => { loadSummary(); loadList(); loadStageGroups() })
 .gi-info { padding: 10px 12px; }
 .gi-name { font-size: 13px; font-weight: 600; color: #1D2129; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gi-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 11px; color: #C0C4CC; }
+.media-detail-preview { margin-top: 18px; }
+.preview-title { margin-bottom: 10px; font-size: 14px; font-weight: 600; color: #1D2129; }
+.preview-body { min-height: 120px; display: flex; justify-content: center; align-items: center; padding: 14px; background: #F7F8FA; border-radius: 8px; }
+.detail-image-preview { width: 100%; height: 320px; }
 @media (max-width: 1200px) { .gallery { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 768px) { .gallery { grid-template-columns: repeat(2, 1fr); } }
 </style>

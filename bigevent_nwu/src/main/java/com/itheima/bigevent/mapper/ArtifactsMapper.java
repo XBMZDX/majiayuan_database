@@ -50,7 +50,7 @@ public interface ArtifactsMapper {
     void update(artifacts artifact);
 
     // 查询文物列表 - 使用XML配置的动态SQL
-    List<artifacts> list(String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
+    List<artifacts> list(String keyword, String newArtifactName, String newArtifactCode, String material1, String excavationRelic, String completeness);
 
     // 按墓葬查询文物列表
     @Select("SELECT * FROM artifacts WHERE burial_id = #{burialId} ORDER BY CAST(serial_number AS UNSIGNED) ASC")

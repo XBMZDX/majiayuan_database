@@ -39,6 +39,7 @@ const projectId = computed(() => Number(route.params.projectId || route.query.pr
 const loading = ref(true)
 const loadError = ref('')
 const project = ref(null)
+const artifact = ref(null)
 const archive = ref(null)
 const workspace = ref(null)
 const activeSection = ref(
@@ -61,6 +62,7 @@ const revisionForm = reactive({ versionNo: '', revisionDescription: '', operator
 
 const applyWorkbench = data => {
     project.value = data?.project || null
+    artifact.value = data?.artifact || null
     archive.value = data?.archive || null
     workspace.value = data?.workspace || null
     revisions.value = data?.revisions || []
@@ -459,6 +461,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', handleBeforeUnl
                     <ArchivePaper
                         :active-section="activeSection"
                         :project="project"
+                        :artifact="artifact"
                         :archive="archive"
                         :sections="sections"
                         :workspace="workspace"

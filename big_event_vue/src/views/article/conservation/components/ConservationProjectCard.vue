@@ -22,15 +22,16 @@ const riskTag = computed(() => {
     const t = { high: '高风险', medium: '中风险', low: '低风险' }
     return { type: m[props.project.riskLevel] || 'info', text: t[props.project.riskLevel] || '未知' }
 })
+const isQuick = computed(() => props.project.recordMode === 'quick')
 
 const projectPath = (page) => `/conservation/project/${props.project.id}/${page}`
-const goArchive = () => { router.push(projectPath('archive')) }
+const goArchive = () => { router.push(projectPath(isQuick.value ? 'quick-record' : 'archive')) }
 const goContinue = () => {
     const stageMap = {
         pendingSurvey: projectPath('disease'), disease: projectPath('disease'),
         planning: projectPath('archive'), protection: projectPath('process'),
         repair: projectPath('process'), restoration: projectPath('restoration'),
-        evaluation: projectPath('comparison'), monitoring: projectPath('monitoring')
+        evaluation: projectPath('comparison'), monitoring: projectPath('monitoring'), quick_record: projectPath('quick-record')
     }
     const path = stageMap[props.project.currentStage] || '/conservation/overview'
     router.push(path)
@@ -39,6 +40,7 @@ const goContinue = () => {
 const handleMore = (cmd) => {
     switch (cmd) {
         case 'edit': emit('edit', props.project); break
+        case 'quick': router.push(projectPath('quick-record')); break
         case 'disease': router.push(projectPath('disease')); break
         case 'archive': goArchive(); break
         case 'process': router.push(projectPath('process')); break
@@ -108,19 +110,22 @@ const handleMore = (cmd) => {
 
         <!-- 操作按钮 -->
         <div class="card-actions">
-            <el-button size="small" type="primary" @click="goArchive">查看档案</el-button>
-            <el-button size="small" @click="goContinue">继续处理</el-button>
+            <el-button size="small" type="primary" @click="goArchive">{{ isQuick ? '查看快速记录' : '查看档案' }}</el-button>
+            <el-button size="small" @click="goContinue">{{ isQuick ? '继续记录' : '继续处理' }}</el-button>
             <el-dropdown @command="handleMore" trigger="click">
                 <el-button size="small" :icon="MoreFilled" />
                 <template #dropdown>
                     <el-dropdown-menu>
                         <el-dropdown-item command="edit">编辑项目</el-dropdown-item>
+                        <el-dropdown-item v-if="isQuick" command="quick">快速修复记录</el-dropdown-item>
+                        <template v-if="!isQuick">
                         <el-dropdown-item command="disease">病害调查</el-dropdown-item>
                         <el-dropdown-item command="archive">保护修复档案</el-dropdown-item>
                         <el-dropdown-item command="process">修复过程记录</el-dropdown-item>
                         <el-dropdown-item command="compare">修复前后对比</el-dropdown-item>
                         <el-dropdown-item command="result">文物复原成果</el-dropdown-item>
                         <el-dropdown-item command="monitor">后续监测</el-dropdown-item>
+                        </template>
                         <el-dropdown-item command="archive2" divided>归档项目</el-dropdown-item>
                         <el-dropdown-item command="delete" style="color:#F56C6C">删除项目</el-dropdown-item>
                     </el-dropdown-menu>

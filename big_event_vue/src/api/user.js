@@ -32,8 +32,18 @@ export const userInfoUpdateService =(userInfoData)=>{
 }
 
 
-export const userAvatarUpdateService=(avatarUrl)=>{
-    let params = new URLSearchParams();
-    params.append('avatarUrl',avatarUrl)
-    return request.patch('/user/updateAvatar',params)
+export const userAvatarUploadService = (file) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request.post('/user/avatar', data)
 }
+
+export const userPasswordUpdateService = (passwordData) => {
+    return request.patch('/user/updatePwd', passwordData)
+}
+
+export const userSecurityOverviewService = () => request.get('/user/security/overview')
+export const userSecurityLogsService = (limit = 20) => request.get('/user/security/logs', { params: { limit } })
+export const userSessionsService = (limit = 20) => request.get('/user/sessions', { params: { limit } })
+export const revokeUserSessionService = (sessionId) => request.delete(`/user/sessions/${sessionId}`)
+export const userLogoutService = () => request.post('/user/logout')
