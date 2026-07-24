@@ -16,8 +16,7 @@ public class Md5Util {
         try {
             messagedigest = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException nsaex) {
-            System.err.println(Md5Util.class.getName() + "初始化失败，MessageDigest不支持MD5Util。");
-            nsaex.printStackTrace();
+            throw new IllegalStateException("当前 JRE 不支持 MD5 兼容校验", nsaex);
         }
     }
 

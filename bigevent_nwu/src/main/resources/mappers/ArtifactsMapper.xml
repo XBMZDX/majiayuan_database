@@ -95,7 +95,7 @@
                 AND completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
-        ORDER BY CAST(a.serial_number AS UNSIGNED) ASC
+        ORDER BY CAST(a.serial_number AS DECIMAL(20,0)) ASC, a.id ASC
     </select>
     <select id="list" resultType="com.itheima.bigevent.pojo.artifacts">
         SELECT a.*
@@ -125,6 +125,6 @@
                 AND a.completeness LIKE CONCAT('%', #{completeness}, '%')
             </if>
         </where>
-        ORDER BY CAST(a.serial_number AS UNSIGNED) ASC
+        ORDER BY CAST(a.serial_number AS DECIMAL(20,0)) ASC, a.id ASC
     </select>
 </mapper>

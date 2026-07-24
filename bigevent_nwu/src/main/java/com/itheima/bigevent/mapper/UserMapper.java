@@ -4,6 +4,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 
 import com.itheima.bigevent.pojo.User;
@@ -23,6 +24,8 @@ public interface UserMapper
     @Update("update user set user_pic = #{avatarUrl},update_time = now() where id = #{id}") 
     void updateAvatar(String avatarUrl,Integer id);
     //更新密码
-    @Update("update user set password = #{md5String},update_time = now(), token_version = token_version + 1 where id = #{id}")
-    void updatePwd(String md5String,Integer id);
+    @Update("update user set password = #{passwordHash},update_time = now(), token_version = token_version + 1 where id = #{id}")
+    void updatePwd(@Param("passwordHash") String passwordHash, @Param("id") Integer id);
+    @Update("update user set password = #{passwordHash},update_time = now() where id = #{id}")
+    void upgradePasswordHash(@Param("passwordHash") String passwordHash, @Param("id") Integer id);
 }

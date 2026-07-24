@@ -4,9 +4,9 @@ server:
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/nwsite
-    username: root
-    password: 123456
+    url: ${DB_URL:jdbc:mysql://localhost:3306/nwsite?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
   sql:
     init:
       mode: always

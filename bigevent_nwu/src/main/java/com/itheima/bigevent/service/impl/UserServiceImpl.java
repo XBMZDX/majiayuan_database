@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import com.itheima.bigevent.mapper.UserMapper;
 import com.itheima.bigevent.pojo.User;
 import com.itheima.bigevent.service.UserService;
-import com.itheima.bigevent.utils.Md5Util;
+import com.itheima.bigevent.utils.PasswordUtil;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
 
 @Service
@@ -26,10 +26,7 @@ public class UserServiceImpl implements UserService
     @Override
     public void register (String username,String password)
     {
-        //加密处理
-        String md5String = Md5Util.getMD5String(password);
-        //添加
-        userMapper.add(username,md5String);
+        userMapper.add(username, PasswordUtil.encode(password));
     }
     //更新
     @Override
@@ -56,6 +53,11 @@ public class UserServiceImpl implements UserService
         Map<String,Object> map =  ThreadLocalUtil.get();
         Integer id = (Integer) map.get("id");
 
-        userMapper.updatePwd(Md5Util.getMD5String(newPwd),id);
-    }    
+        userMapper.updatePwd(PasswordUtil.encode(newPwd),id);
+    }
+
+    @Override
+    public void upgradeLegacyPassword(Integer id, String rawPassword) {
+        userMapper.upgradePasswordHash(PasswordUtil.encode(rawPassword), id);
+    }
 }

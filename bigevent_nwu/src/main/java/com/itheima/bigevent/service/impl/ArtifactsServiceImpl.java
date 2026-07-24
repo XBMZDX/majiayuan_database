@@ -90,8 +90,10 @@ public class ArtifactsServiceImpl implements ArtifactsService {
         // 批量删除
         artifactsMapper.batchDelete(ids);
         // 全部删除后整体重新编号，保持序号连续
-        artifactsMapper.initRowNum();
-        artifactsMapper.renumberAllSerialNumbers();
+        int serialNumber = 1;
+        for (Integer artifactId : artifactsMapper.listIdsInSerialOrder()) {
+            artifactsMapper.updateSerialNumber(artifactId, serialNumber++);
+        }
     }
 
     @Override

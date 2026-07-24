@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:mysql://localhost:3306/nwsite_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${TEST_DB_USERNAME:${DB_USERNAME:root}}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD}}
+  sql:
+    init:
+      mode: never

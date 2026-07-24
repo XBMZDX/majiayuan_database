@@ -1,24 +1,22 @@
 import {createRouter,createWebHistory} from 'vue-router'
-import LoginVue from '@/views/Login.vue'
-import LayoutVue from '@/views/layout.vue'
-
-import ArtifactsManage from '@/views/article/ArtifactsManage.vue'
-import show from '@/views/article/show.vue'
-import TombManage from '@/views/article/TombManage.vue'
-import TombWorkflow from '@/views/article/TombWorkflow.vue'
-import TombExcavation from '@/views/article/TombExcavation.vue'
-import CoffinBasic from '@/views/article/CoffinBasic.vue'
-import CoffinArtifacts from '@/views/article/CoffinArtifacts.vue'
-import ChariotBasic from '@/views/article/ChariotBasic.vue'
-import ChariotArtifacts from '@/views/article/ChariotArtifacts.vue'
-import DetectionAnalysis from '@/views/article/DetectionAnalysis.vue'
-import DigitalArchive from '@/views/article/DigitalArchive.vue'
-import LabInstruments from '@/views/article/LabInstruments.vue'
-import DetectionOverview from '@/views/article/DetectionOverview.vue'
-import DetectionResult from '@/views/article/DetectionResult.vue'
-import ExperimentDetail from '@/views/article/ExperimentDetail.vue'
-import UserInfoVue from '@/views/user/UserInfo.vue'
-import UserResetPasswordVue from '@/views/user/UserResetPassword.vue'
+const LoginVue = () => import('@/views/Login.vue')
+const LayoutVue = () => import('@/views/layout.vue')
+const ArtifactsManage = () => import('@/views/article/ArtifactsManage.vue')
+const show = () => import('@/views/article/show.vue')
+const TombManage = () => import('@/views/article/TombManage.vue')
+const TombWorkflow = () => import('@/views/article/TombWorkflow.vue')
+const TombExcavation = () => import('@/views/article/TombExcavation.vue')
+const CoffinBasic = () => import('@/views/article/CoffinBasic.vue')
+const CoffinArtifacts = () => import('@/views/article/CoffinArtifacts.vue')
+const ChariotBasic = () => import('@/views/article/ChariotBasic.vue')
+const ChariotArtifacts = () => import('@/views/article/ChariotArtifacts.vue')
+const DetectionAnalysis = () => import('@/views/article/DetectionAnalysis.vue')
+const LabInstruments = () => import('@/views/article/LabInstruments.vue')
+const DetectionOverview = () => import('@/views/article/DetectionOverview.vue')
+const DetectionResult = () => import('@/views/article/DetectionResult.vue')
+const ExperimentDetail = () => import('@/views/article/ExperimentDetail.vue')
+const UserInfoVue = () => import('@/views/user/UserInfo.vue')
+const UserResetPasswordVue = () => import('@/views/user/UserResetPassword.vue')
 
 const routes = [
     {path:'/Login',component:LoginVue},

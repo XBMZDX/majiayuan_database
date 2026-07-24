@@ -5,6 +5,8 @@ import java.util.Map;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.itheima.bigevent.mapper.UserSecurityMapper;
 import com.itheima.bigevent.pojo.User;
@@ -19,6 +21,7 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class LoginInterceptor implements HandlerInterceptor
 {
+    private static final Logger log = LoggerFactory.getLogger(LoginInterceptor.class);
     @Resource
     private UserService userService;
     @Resource
@@ -37,20 +40,36 @@ public class LoginInterceptor implements HandlerInterceptor
             Object tokenVersion = claims.get("tokenVersion");
             String sessionId = claims.get("sessionId") instanceof String ? (String) claims.get("sessionId") : null;
             User currentUser = username == null ? null : userService.findByUserName(username);
-            if (currentUser == null || !(tokenVersion instanceof Number)
-                    || sessionId == null
-                    || ((Number) tokenVersion).intValue() != (currentUser.getTokenVersion() == null ? 0 : currentUser.getTokenVersion())
-                    || securityMapper.isSessionActive(sessionId, currentUser.getId()) == 0) {
+            int expectedTokenVersion = currentUser == null || currentUser.getTokenVersion() == null
+                    ? 0 : currentUser.getTokenVersion();
+            int activeSessionCount = currentUser == null || sessionId == null
+                    ? 0 : securityMapper.isSessionActive(sessionId, currentUser.getId());
+            boolean valid = currentUser != null
+                    && tokenVersion instanceof Number
+                    && sessionId != null
+                    && ((Number) tokenVersion).intValue() == expectedTokenVersion
+                    && activeSessionCount > 0;
+            if (!valid) {
+                log.warn("认证被拒绝: path={}, user={}, tokenVersion={}, expectedTokenVersion={}, hasSessionId={}, activeSessionCount={}",
+                        request.getRequestURI(), username, tokenVersion, expectedTokenVersion, sessionId != null, activeSessionCount);
                 response.setStatus(401);
                 return false;
             }
-            securityMapper.touchSession(sessionId, currentUser.getId());
             ThreadLocalUtil.set(claims);
             //放行
             return true;
         } 
         catch (Exception e)
         {
+            Throwable rootCause = e;
+            while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+                rootCause = rootCause.getCause();
+            }
+            log.warn("认证校验异常: path={}, reason={}, rootReason={}, detail={}",
+                    request.getRequestURI(),
+                    e.getClass().getSimpleName(),
+                    rootCause.getClass().getSimpleName(),
+                    rootCause.getMessage());
             response.setStatus(401);
             //不放行
             return false;   

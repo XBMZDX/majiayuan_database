@@ -17,4 +17,6 @@ public interface UserService
 
     //更新用户密码
     void updatePwd(String newPwd);
+
+    void upgradeLegacyPassword(Integer id, String rawPassword);
 }

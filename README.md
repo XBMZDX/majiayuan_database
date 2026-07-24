@@ -1,5 +1,18 @@
 # 马家塬考古数据库管理系统
 
+## 本机运行配置
+
+首次使用请在 MySQL 中手动执行根目录的 `init.sql`，再设置后端启动环境变量。Windows PowerShell 示例：
+
+```powershell
+$env:DB_PASSWORD='123456'
+$env:JWT_SECRET='请替换为至少32位且固定的本机随机字符串'
+$env:OSS_ACCESS_KEY_ID='你的OSS AccessKey ID'
+$env:OSS_ACCESS_KEY_SECRET='你的OSS AccessKey Secret'
+```
+
+在 IntelliJ IDEA 启动时，可在 `Run → Edit Configurations → Environment variables` 中设置同名变量。数据库密码、JWT 密钥和 OSS 密钥均不应写入或提交到配置文件。测试环境请使用独立的 `nwsite_test` 数据库，并以 `test` Profile 运行。
+
 考古遗址出土文物的数字化管理系统，支持遗址、遗迹、墓葬、棺/车、文物的录入检索，以及墓葬与棺的工作流程管理、文物检测分析等功能。
 
 ## 技术栈

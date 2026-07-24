@@ -149,7 +149,7 @@ const clearRegisterData=()=>{
 
     .bg {
         background: url('@/assets/login222.png') no-repeat 60% center / 240px auto,
-            url('@/assets/login.jpg') no-repeat center / cover;
+            url('@/assets/login-optimized.jpg') no-repeat center / cover;
         border-radius: 0 20px 20px 0;
         position: relative;
         display: flex;

@@ -7,7 +7,7 @@ import com.itheima.bigevent.pojo.UserProfileUpdateRequest;
 import com.itheima.bigevent.service.UserService;
 import com.itheima.bigevent.utils.AliOssUtil;
 import com.itheima.bigevent.utils.JwtUtil;
-import com.itheima.bigevent.utils.Md5Util;
+import com.itheima.bigevent.utils.PasswordUtil;
 import com.itheima.bigevent.utils.ThreadLocalUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
@@ -48,7 +48,11 @@ public class UserController {
                                 HttpServletRequest request) {
         User loginUser = userService.findByUserName(username);
         if (loginUser == null) return Result.error("用户名错误");
-        if (!Md5Util.getMD5String(password).equals(loginUser.getPassword())) return Result.error("密码错误");
+        if (!PasswordUtil.matches(password, loginUser.getPassword())) return Result.error("密码错误");
+        if (PasswordUtil.needsUpgrade(loginUser.getPassword())) {
+            userService.upgradeLegacyPassword(loginUser.getId(), password);
+            loginUser = userService.findByUserName(username);
+        }
 
         String sessionId = UUID.randomUUID().toString();
         String ipAddress = clientIp(request);
@@ -124,7 +128,7 @@ public class UserController {
         }
         if (!newPwd.matches("^\\S{5,16}$")) return Result.error("新密码应为 5-16 位非空字符");
         User loginUser = currentUser();
-        if (!loginUser.getPassword().equals(Md5Util.getMD5String(oldPwd))) return Result.error("原密码填写错误");
+        if (!PasswordUtil.matches(oldPwd, loginUser.getPassword())) return Result.error("原密码填写错误");
         if (!rePwd.equals(newPwd)) return Result.error("两次密码填写不相同");
 
         userService.updatePwd(newPwd);

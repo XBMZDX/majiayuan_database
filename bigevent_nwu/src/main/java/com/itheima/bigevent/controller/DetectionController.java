@@ -347,7 +347,7 @@ public class DetectionController {
 
     @Mapper
     public interface DetectionMapper {
-        @Select("SELECT * FROM detection_analysis ORDER BY CAST(serial_number AS UNSIGNED) ASC")
+        @Select("SELECT * FROM detection_analysis ORDER BY CAST(serial_number AS DECIMAL(20,0)) ASC, id ASC")
         List<DetectionAnalysis> list();
 
         @Select("SELECT * FROM detection_analysis WHERE id=#{id}")

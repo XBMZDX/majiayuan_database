@@ -1,0 +1,7 @@
+# Local credentials and generated files
+bigevent_nwu/src/main/resources/application-local.yml
+bigevent_nwu/src/main/resources/application-test-local.yml
+.idea/
+**/target/
+**/node_modules/
+**/dist/
