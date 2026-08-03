@@ -128,7 +128,7 @@ const handleCommand = (command) => {
     <el-container class="layout-container">
         <!-- 左侧菜单 -->
         <el-aside width="200px">
-            <div class="el-aside__logo"></div>
+            <div class="el-aside__logo">导航栏</div>
             <!-- 菜单标签 -->
             <el-menu :default-active="activeMenu" active-text-color="#ffd04b" background-color="#1668C4" text-color="#fff" router>
                 <!-- 展示的对应组件访问的路径 -->
@@ -259,7 +259,13 @@ const handleCommand = (command) => {
 
         &__logo {
             height: 120px;
-            background: url('@/assets/login222.png') no-repeat center / 200px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 4px;
         }
 
         .el-menu {

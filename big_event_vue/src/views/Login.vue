@@ -78,11 +78,9 @@ const clearRegisterData=()=>{
 </script>
 
 <template>
-    <el-row class="login-page">
-        <el-col :span="12" class="bg">
-            <div class="welcome-text">马家塬文物数据库</div>
-        </el-col>
-        <el-col :span="6" :offset="3" class="form">
+    <main class="login-page">
+        <div class="brand">马家塬数据库</div>
+        <section class="form">
             <!-- 注册表单 -->
             <el-form ref="form" size="large" autocomplete="off" v-if="isRegister" :model = "registerData" :rules="rules">
                 <el-form-item>
@@ -136,60 +134,67 @@ const clearRegisterData=()=>{
                     </el-link>
                 </el-form-item>
             </el-form>
-        </el-col>
-    </el-row>
+        </section>
+    </main>
     
 </template>
 
 <style lang="scss" scoped>
-/* 样式 */
 .login-page {
-    height: 100vh;
-    background-color: #fff;
+    position: relative;
+    display: flex;
+    min-height: 100vh;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: linear-gradient(135deg, #f5f8fb 0%, #eef4f7 48%, #f7fafb 100%);
+}
 
-    .bg {
-        background: url('@/assets/login222.png') no-repeat 60% center / 240px auto,
-            url('@/assets/login-optimized.jpg') no-repeat center / cover;
-        border-radius: 0 20px 20px 0;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
+.brand {
+    position: absolute;
+    top: 32px;
+    left: 40px;
+    color: #1d4e66;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
 
-    .welcome-text {
-        position: absolute;
-        top: calc(50% + 50px);
-        left: 57%;
-        transform: translateX(-50%);
-        color: white;
-        font-size: 30px;
-        font-weight: bold;
+.form {
+    width: min(400px, 100%);
+    box-sizing: border-box;
+    padding: 36px 40px 30px;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #e3eaf0;
+    border-radius: 16px;
+    box-shadow: 0 18px 46px rgba(31, 72, 94, 0.13);
+
+    h1 {
+        width: 100%;
+        margin: 0 0 8px;
+        color: #1f2937;
+        font-size: 25px;
+        letter-spacing: 1px;
         text-align: center;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        white-space: nowrap;
     }
 
-    .form {
+    .button {
+        width: 100%;
+        height: 42px;
+    }
+
+    .flex {
         display: flex;
-        flex-direction: column;
-        justify-content: center;
-        user-select: none;
-
-        .title {
-            margin: 0 auto;
-        }
-
-        .button {
-            width: 100%;
-        }
-
-        .flex {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-        }
+        width: 100%;
+        justify-content: space-between;
     }
+}
+
+@media (max-width: 600px) {
+    .login-page { padding: 24px; }
+    .brand { top: 24px; left: 24px; font-size: 21px; }
+    .form { padding: 30px 24px 24px; }
 }
 </style>
